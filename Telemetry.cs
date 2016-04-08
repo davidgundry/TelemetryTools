@@ -1019,7 +1019,8 @@ namespace TelemetryTools
         {
             data = new byte[0];
 
-            FilePath cacheFile = directory + "/" + filename;
+            FilePath cacheFile = GetFileInfo(cacheDirectory, filename).FullName;
+
             if (File.Exists(cacheFile))
             {
                 data = File.ReadAllBytes(cacheFile);
