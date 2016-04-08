@@ -372,6 +372,7 @@ namespace TelemetryTools
                                     sb.Append("\n* Key ID is null");
 
                                 Debug.LogWarning(sb.ToString());
+                                return false;
                             }
                         }
                         else
@@ -380,13 +381,17 @@ namespace TelemetryTools
                             File.Delete(GetFileInfo(cacheDirectory, cachedFilesList[i]).FullName);
                             cachedFilesList.RemoveAt(i);
                             WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename));
+                            return false;
                         }
                     }
                     else
+                    {
                         Debug.LogWarning("Cannot upload cache file because KeyID " + keyID.ToString() + " has not been retrieved from the key server.");
+                        return false;
+                    }
                 }
             }
-            return wwwBusy; // If www is busy, we successfully found something to upload
+            return true; // If www is busy, we successfully found something to upload
         }
 
         private static void SendUserDataByHTTPPost( URL userDataURL,
