@@ -1134,22 +1134,29 @@ namespace TelemetryTools
 
         private static void WriteValueToFile(ValueType value, FileInfo file)
         {
-            FileStream fileStream = null;
-            try
-            {
-                fileStream = file.Open(FileMode.Create);
+            BackgroundWorker bgWorker = new BackgroundWorker();
 
-                byte[] bytes = StringToBytes(value.ToString() + "\n");
-                fileStream.Write(bytes, 0, bytes.Length);
-            }
-            finally
+            bgWorker.DoWork += (o,a) =>
             {
-                if (fileStream != null)
+                FileStream fileStream = null;
+                try
                 {
-                    fileStream.Close();
-                    fileStream = null;
+                    fileStream = file.Open(FileMode.Create);
+
+                    byte[] bytes = StringToBytes(value.ToString() + "\n");
+                    fileStream.Write(bytes, 0, bytes.Length);
                 }
-            }
+                finally
+                {
+                    if (fileStream != null)
+                    {
+                        fileStream.Close();
+                        fileStream = null;
+                    }
+                }
+            };
+            //new DoWorkEventHandler(BGWorker_WriteValueToFile);
+            bgWorker.RunWorkerAsync();
         }
 
         private static bool IsFileOpen(FileInfo file)
