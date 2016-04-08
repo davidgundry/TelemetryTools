@@ -3,43 +3,104 @@ using System.Collections;
 using System.IO;
 using System;
 
-public class FileAccessor : MonoBehaviour {
+using FilePath = System.String;
+using System.Collections.Generic;
 
-    void Start()
+namespace TelemetryTools
+{
+    public class FileAccessor : MonoBehaviour
     {
-        TelemetryTools.Telemetry.Instance.FileAccessor = this;
-    }
 
-	// Update is called once per frame
-	void Update () {
-	
-	}
+        private Dictionary<string, IEnumerator> ienumerators = new Dictionary<FilePath, IEnumerator>();
 
-    public void WriteDataToFile(byte[] data, FileInfo file)
-    {
-        StartCoroutine(WriteDataToFileCoroutine(data,file));
-    }
-
-    IEnumerator WriteDataToFileCoroutine(byte[] data, FileInfo file)
-    {
-        FileStream fileStream = null;
-        try
+        void Start()
         {
-            fileStream = file.Open(FileMode.Create);
-            for (int i = 0; i < data.Length; i += 1024)
+            TelemetryTools.Telemetry.Instance.FileAccessor = this;
+        }
+
+        // Update is called once per frame
+        void Update()
+        {
+
+        }
+
+        public void WriteDataToFile(byte[] data, FileInfo file)
+        {
+            StartCoroutine(WriteDataToFileCoroutine(data, file));
+        }
+
+        IEnumerator WriteDataToFileCoroutine(byte[] data, FileInfo file)
+        {
+            FileStream fileStream = null;
+            try
             {
-                fileStream.Write(data, i, Math.Min(data.Length - i, 1024));
-                yield return false;
+                fileStream = file.Open(FileMode.Create);
+                for (int i = 0; i < data.Length; i += 1024)
+                {
+                    fileStream.Write(data, i, Math.Min(data.Length - i, 1024));
+                    yield return false;
+                }
+            }
+            finally
+            {
+                if (fileStream != null)
+                {
+                    fileStream.Close();
+                    fileStream = null;
+                }
+            }
+            yield return true;
+        }
+
+        public bool WriteStringsToFile(string[] stringList, FileInfo file)
+        {
+            if (ienumerators.ContainsKey(file.FullName))
+            {
+                IEnumerator value;
+                ienumerators.TryGetValue(file.FullName, out value);
+                StopCoroutine(value);
+                ((IDisposable)value).Dispose();
+                ienumerators.Remove(file.FullName);
+                return false;
+            }
+            else
+            {
+                IEnumerator coroutine = WriteStringsToFileCoroutine(stringList, file);
+                StartCoroutine(coroutine);
+                ienumerators.Add(file.FullName, coroutine);
+                return true;
             }
         }
-        finally
+
+        private IEnumerator WriteStringsToFileCoroutine(string[] stringList, FileInfo file)
         {
-            if (fileStream != null)
+            FileStream fileStream = null;
+            byte[] newLine = Telemetry.StringToBytes("\n");
+            try
             {
-                fileStream.Close();
-                fileStream = null;
+                fileStream = file.Open(FileMode.Create);
+
+                int i = 0;
+                foreach (FilePath str in stringList)
+                {
+                    byte[] bytes = Telemetry.StringToBytes(str);
+                    fileStream.Write(bytes, 0, bytes.Length);
+                    fileStream.Write(newLine, 0, newLine.Length);
+                    i++;
+                    if (i % 10 == 0)
+                        yield return false;
+                }
             }
+            finally
+            {
+                if (fileStream != null)
+                {
+                    fileStream.Close();
+                    fileStream = null;
+                }
+            }
+            yield return true;
         }
-        yield return true;
+
     }
 }

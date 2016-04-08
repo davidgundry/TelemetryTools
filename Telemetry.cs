@@ -99,6 +99,7 @@ namespace TelemetryTools
         private const FilePath cacheDirectory = "cache";
         private const FilePath cacheListFilename = "cache.txt";
         private List<FilePath> cachedFilesList;
+        private bool cachedFilesListDirty;
 #endif
         private const Milliseconds uploadCachedFilesDelayOnFailure = 10000;
 
@@ -132,6 +133,7 @@ namespace TelemetryTools
         private List<FilePath> userDataFilesList;
         public List<FilePath> UserDataFilesList { get { return userDataFilesList; } }
         public int UserDataFiles { get { if (userDataFilesList != null) return userDataFilesList.Count; return 0; } }
+        private bool userDataFilesListDirty;
 
         private const Milliseconds uploadUserDataDelayOnFailure = 10000;
 
@@ -213,7 +215,7 @@ namespace TelemetryTools
                     offBufferFull = !SendBuffer(RemoveTrailingNulls(OffBuffer));
 #if POSTENABLED
             keyManager.HandleKeyWWWResponse();
-            HandleUserDataWWWResponse(ref userDatawww, ref userDatawwwBusy, ref userDatawwwKeyID, ref userData, userDatawwwKeyID, keyManager.CurrentKeyID, userDataFilesList);
+            HandleUserDataWWWResponse(ref userDatawww, ref userDatawwwBusy, ref userDatawwwKeyID, ref userData, userDatawwwKeyID, keyManager.CurrentKeyID, userDataFilesList,fileAccessor);
             SaveDataOnWWWErrorIfWeCan();
 
             keyManager.Update(httpPostEnabled);
@@ -235,12 +237,22 @@ namespace TelemetryTools
                             bufferPos = 0;
             }
 #endif
+
+            if (userDataFilesListDirty)
+            {
+                userDataFilesListDirty = !fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename)); ;
+            }
+            if (cachedFilesListDirty)
+            {
+                cachedFilesListDirty = !fileAccessor.WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename)); ;
+            }
+
             ConnectionLogger.Instance.Update();
         }
 
         public void WriteEverything()
         {
-            SaveUserData(keyManager.CurrentKeyID, userData, userDataFilesList);
+            SaveUserData(keyManager.CurrentKeyID, userData, userDataFilesList,fileAccessor);
 
             SendFrame();
             byte[] dataInBuffer = GetDataInActiveBuffer();
@@ -330,7 +342,8 @@ namespace TelemetryTools
                     else
                     {
                         userDataFilesList.RemoveAt(i);
-                        WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
+                        //fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
+                        userDataFilesListDirty = true;
                     }
 
                 }
@@ -359,7 +372,8 @@ namespace TelemetryTools
                                 SendByHTTPPost(data, snID, sqID, fileExtension, keyManager.GetKeyByID(keyID), keyID, uploadURL, ref www, out wwwData, out wwwSequenceID, out wwwSessionID, out wwwBusy, out wwwKey, out wwwKeyID);
                                 File.Delete(GetFileInfo(cacheDirectory, cachedFilesList[i]).FullName);
                                 cachedFilesList.RemoveAt(i);
-                                WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename));
+                                //fileAccessor.WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename));
+                                cachedFilesListDirty = true;
                             }
                             else
                             {
@@ -383,7 +397,8 @@ namespace TelemetryTools
                             Debug.LogWarning("Error loading from cache file for KeyID:  " + (keyID == null ? "null" : keyID.ToString()));
                             File.Delete(GetFileInfo(cacheDirectory, cachedFilesList[i]).FullName);
                             cachedFilesList.RemoveAt(i);
-                            WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename));
+                            //fileAccessor.WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename));
+                            cachedFilesListDirty = true;
                             return false;
                         }
                     }
@@ -428,10 +443,10 @@ namespace TelemetryTools
 
         public void SaveUserData()
         {
-            SaveUserData(keyManager.CurrentKeyID, userData, userDataFilesList);
+            SaveUserData(keyManager.CurrentKeyID, userData, userDataFilesList,fileAccessor);
         }
 
-        private static void SaveUserData(KeyID currentKeyID, Dictionary<UserDataKey,string> userData, List<FilePath> userDataFilesList)
+        private static void SaveUserData(KeyID currentKeyID, Dictionary<UserDataKey,string> userData, List<FilePath> userDataFilesList, FileAccessor fileAccessor)
         {
             if (currentKeyID != null)
             {
@@ -448,24 +463,24 @@ namespace TelemetryTools
                         }
 
                         FileInfo file = GetFileInfo(userDataDirectory, currentKeyID.ToString() + "." + userDataFileExtension);
-                        WriteStringsToFile(stringList, file);
+                        fileAccessor.WriteStringsToFile(stringList, file);
                         userDataFilesList.Remove(file.Name);
                         userDataFilesList.Add(file.Name);
                         //TODO: Append rather than rewrite everything
-                        WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
+                        fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
                     }
                     else
                     {
                         File.Delete(GetFileInfo(userDataDirectory, currentKeyID.ToString() + "." + userDataFileExtension).FullName);
                         userDataFilesList.Remove(currentKeyID.ToString() + "." + userDataFileExtension);
-                        WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
+                        fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
                     }
                 }
                 else
                 {
                     File.Delete(GetFileInfo(userDataDirectory, currentKeyID.ToString() + "." + userDataFileExtension).FullName);
                     userDataFilesList.Remove(currentKeyID.ToString() + "." + userDataFileExtension);
-                    WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
+                    fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
                 }
             }
             else
@@ -491,13 +506,14 @@ namespace TelemetryTools
             return null;
         }
 
-        private static bool HandleUserDataWWWResponse(ref WWW userDatawww,
+        private bool HandleUserDataWWWResponse(ref WWW userDatawww,
                                                     ref bool userDatawwwBusy,
                                                     ref KeyID userDatawwwKeyID,
                                                     ref Dictionary<UserDataKey, string> userData,
                                                     KeyID wwwKeyID,
                                                     KeyID currentKeyID,
-                                                    List<string> userDataFilesList)
+                                                    List<string> userDataFilesList,
+                                                    FileAccessor fileAccessor)
         {
             if (userDatawww != null)
             {
@@ -521,7 +537,8 @@ namespace TelemetryTools
                         {
                             File.Delete(GetFileInfo(userDataDirectory, wwwKeyID.ToString() + "." + userDataFileExtension).FullName);
                             userDataFilesList.Remove(wwwKeyID.ToString() + "." + userDataFileExtension);
-                            WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
+                            //fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
+                            userDataFilesListDirty = true;
                         }
 
                         userDatawwwBusy = false;
@@ -1020,40 +1037,6 @@ namespace TelemetryTools
             return false;
         }
 
-
-        private static void WriteStringsToFile(string[] stringList, FileInfo file)
-        {
-            BackgroundWorker bgWorker = new BackgroundWorker();
-
-            bgWorker.DoWork += (o, a) =>
-            {
-                FileStream fileStream = null;
-                byte[] newLine = StringToBytes("\n");
-                try
-                {
-                    fileStream = file.Open(FileMode.Create);
-
-                    foreach (FilePath str in stringList)
-                    {
-                        byte[] bytes = StringToBytes(str);
-                        fileStream.Write(bytes, 0, bytes.Length);
-                        fileStream.Write(newLine, 0, newLine.Length);
-                    }
-                }
-                finally
-                {
-                    if (fileStream != null)
-                    {
-                        fileStream.Close();
-                        fileStream = null;
-                    }
-                }
-            };
-            //new DoWorkEventHandler(BGWorker_WriteValueToFile);
-            bgWorker.RunWorkerAsync();
-        }
-
-
         private static List<FilePath> ReadStringsFromFile(FileInfo file)
         {
             List<FilePath> list = new List<FilePath>();
@@ -1256,7 +1239,8 @@ namespace TelemetryTools
 
                         cachedFilesList.Add(file.Name);
                         //TODO: Append rather than rewrite everything
-                        WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename));
+                        //fileAccessor.WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename));
+                        cachedFilesListDirty = true;
                         return true;
                     }
                     else
@@ -1301,17 +1285,17 @@ namespace TelemetryTools
         }
 #endif
 
-        private static byte[] StringToBytes(string str)
+        public static byte[] StringToBytes(string str)
         {
             return Encoding.ASCII.GetBytes(str);
         }
 
-        private static string BytesToString(byte[] bytes)
+        public static string BytesToString(byte[] bytes)
         {
             return Encoding.ASCII.GetString(bytes);
         }
 
-        private static byte[] RemoveTrailingNulls(byte[] data)
+        public static byte[] RemoveTrailingNulls(byte[] data)
         {
             int i=data.Length-1;
             while (data[i] == 0)
