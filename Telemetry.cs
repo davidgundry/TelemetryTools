@@ -972,20 +972,27 @@ namespace TelemetryTools
 #if LOCALSAVEENABLED
         private static void WriteDataToFile(byte[] data, FileInfo file)
         {
-            FileStream fileStream = null;
-            try
+            BackgroundWorker bgWorker = new BackgroundWorker();
+
+            bgWorker.DoWork += (o, a) =>
             {
-                fileStream = file.Open(FileMode.Create);
-                fileStream.Write(data, 0, data.Length);
-            }
-            finally
-            {
-                if (fileStream != null)
+                FileStream fileStream = null;
+                try
                 {
-                    fileStream.Close();
-                    fileStream = null;
+                    fileStream = file.Open(FileMode.Create);
+                    fileStream.Write(data, 0, data.Length);
                 }
-            }
+                finally
+                {
+                    if (fileStream != null)
+                    {
+                        fileStream.Close();
+                        fileStream = null;
+                    }
+                }
+            };
+            //new DoWorkEventHandler(BGWorker_WriteValueToFile);
+            bgWorker.RunWorkerAsync();
         }
 
         private static void ParseCacheFileName(FilePath directory, FilePath filename, out SessionID sessionID, out SequenceID sequenceID, out KeyID keyID)
@@ -1036,27 +1043,34 @@ namespace TelemetryTools
 
         private static void WriteStringsToFile(string[] stringList, FileInfo file)
         {
-            FileStream fileStream = null;
-            byte[] newLine = StringToBytes("\n");
-            try
-            {
-                fileStream = file.Open(FileMode.Create);
+            BackgroundWorker bgWorker = new BackgroundWorker();
 
-                foreach (FilePath str in stringList)
-                {
-                    byte[] bytes = StringToBytes(str);
-                    fileStream.Write(bytes, 0, bytes.Length);
-                    fileStream.Write(newLine, 0, newLine.Length);
-                }
-            }
-            finally
+            bgWorker.DoWork += (o, a) =>
             {
-                if (fileStream != null)
+                FileStream fileStream = null;
+                byte[] newLine = StringToBytes("\n");
+                try
                 {
-                    fileStream.Close();
-                    fileStream = null;
+                    fileStream = file.Open(FileMode.Create);
+
+                    foreach (FilePath str in stringList)
+                    {
+                        byte[] bytes = StringToBytes(str);
+                        fileStream.Write(bytes, 0, bytes.Length);
+                        fileStream.Write(newLine, 0, newLine.Length);
+                    }
                 }
-            }
+                finally
+                {
+                    if (fileStream != null)
+                    {
+                        fileStream.Close();
+                        fileStream = null;
+                    }
+                }
+            };
+            //new DoWorkEventHandler(BGWorker_WriteValueToFile);
+            bgWorker.RunWorkerAsync();
         }
 
 
