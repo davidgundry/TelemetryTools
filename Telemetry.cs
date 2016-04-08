@@ -155,6 +155,9 @@ namespace TelemetryTools
         private KeyManager keyManager;
         public KeyManager KeyManager { get { return keyManager; } }
 
+        private FileAccessor fileAccessor;
+        public FileAccessor FileAccessor { get { return fileAccessor; } set { fileAccessor = value; } }
+
         public int CachedFiles
         {
             get
@@ -970,30 +973,7 @@ namespace TelemetryTools
 #endif
 
 #if LOCALSAVEENABLED
-        private static void WriteDataToFile(byte[] data, FileInfo file)
-        {
-            BackgroundWorker bgWorker = new BackgroundWorker();
 
-            bgWorker.DoWork += (o, a) =>
-            {
-                FileStream fileStream = null;
-                try
-                {
-                    fileStream = file.Open(FileMode.Create);
-                    fileStream.Write(data, 0, data.Length);
-                }
-                finally
-                {
-                    if (fileStream != null)
-                    {
-                        fileStream.Close();
-                        fileStream = null;
-                    }
-                }
-            };
-            //new DoWorkEventHandler(BGWorker_WriteValueToFile);
-            bgWorker.RunWorkerAsync();
-        }
 
         private static void ParseCacheFileName(FilePath directory, FilePath filename, out SessionID sessionID, out SequenceID sequenceID, out KeyID keyID)
         {
@@ -1269,17 +1249,25 @@ namespace TelemetryTools
                 FileInfo file = GetFileInfo(cacheDirectory, sessionID, sequenceID, key, GetTimeFromStart(), fileExtension);
                 if ((!File.Exists(file.FullName)) || (!IsFileOpen(file)))
                 {
-                    WriteDataToFile(data, file);
-                    ConnectionLogger.Instance.AddDataSavedToFileSinceUpdate((uint)data.Length);
+                    if (fileAccessor != null)
+                    {
+                        fileAccessor.WriteDataToFile(data, file);
+                        ConnectionLogger.Instance.AddDataSavedToFileSinceUpdate((uint)data.Length);
 
-                    cachedFilesList.Add(file.Name);
-                    //TODO: Append rather than rewrite everything
-                    WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename));
-                    return true;
+                        cachedFilesList.Add(file.Name);
+                        //TODO: Append rather than rewrite everything
+                        WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename));
+                        return true;
+                    }
+                    else
+                    {
+                        Debug.LogWarning("Couldn't write cache file because fileAccessor is null");
+                        return false;
+                    }
                 }
                 else
                 {
-                    Debug.LogWarning("Couldn't write cache file becasue it was open or it already exists");
+                    Debug.LogWarning("Couldn't write cache file because it was open or it already exists");
                     return false;
                 }
             }
