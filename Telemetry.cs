@@ -168,7 +168,6 @@ namespace TelemetryTools
             }
         }
 
-
         public Telemetry(URL uploadURL = "", URL keyServer = "", URL userDataURL = "", Bytes bufferSize = defaultBufferSize, Bytes frameBufferSize = defaultFrameBufferSize, Bytes minSendingThreshold = defaultMinSendingThreshold)
         {
             this.bufferSize = bufferSize;
@@ -177,6 +176,7 @@ namespace TelemetryTools
             outboxBuffer1 = new byte[bufferSize];
             outboxBuffer2 = new byte[bufferSize];
             frameBuffer = new byte[frameBufferSize];
+
 
             Array.Clear(outboxBuffer1, 0, outboxBuffer1.Length);
             Array.Clear(outboxBuffer2, 0, outboxBuffer2.Length);
@@ -313,21 +313,24 @@ namespace TelemetryTools
 
         public bool UploadBacklogOfUserData()
         {
-            int i = 0;
-            if (!userDatawwwBusy)
+            if (userDataFilesList.Count > 0)
             {
-                string[] separators = new string[1];
-                separators[0] = ".";
-                string[] strs = userDataFilesList[i].Split(separators, 2, System.StringSplitOptions.None);
-                uint result = 0;
-                if (UInt32.TryParse(strs[0], out result))
-                    UploadUserData(result);
-                else
+                int i = 0;
+                if (!userDatawwwBusy)
                 {
-                    userDataFilesList.RemoveAt(i);
-                    WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
-                }
+                    string[] separators = new string[1];
+                    separators[0] = ".";
+                    string[] strs = userDataFilesList[i].Split(separators, 2, System.StringSplitOptions.None);
+                    uint result = 0;
+                    if (UInt32.TryParse(strs[0], out result))
+                        UploadUserData(result);
+                    else
+                    {
+                        userDataFilesList.RemoveAt(i);
+                        WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
+                    }
 
+                }
             }
             return userDatawwwBusy; // If www is busy, we successfully found something to upload
         }
@@ -481,12 +484,12 @@ namespace TelemetryTools
         }
 
         private static bool HandleUserDataWWWResponse(ref WWW userDatawww,
-            ref bool userDatawwwBusy,
-            ref KeyID userDatawwwKeyID,
-            ref Dictionary<UserDataKey, string> userData,
-            KeyID wwwKeyID,
-            KeyID currentKeyID,
-            List<string> userDataFilesList)
+                                                    ref bool userDatawwwBusy,
+                                                    ref KeyID userDatawwwKeyID,
+                                                    ref Dictionary<UserDataKey, string> userData,
+                                                    KeyID wwwKeyID,
+                                                    KeyID currentKeyID,
+                                                    List<string> userDataFilesList)
         {
             if (userDatawww != null)
             {
