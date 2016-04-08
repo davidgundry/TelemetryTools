@@ -52,6 +52,12 @@ namespace TelemetryTools
             yield return true;
         }
 
+        /// <summary>
+        /// Uses an IEnumerator to write strings to file. Cancels previous writes if need to re-access file. If this is called too frequently there is the chance that the file will never be fully written!
+        /// </summary>
+        /// <param name="stringList"></param>
+        /// <param name="file"></param>
+        /// <returns></returns>
         public bool WriteStringsToFile(string[] stringList, FileInfo file)
         {
             if (ienumerators.ContainsKey(file.FullName))
