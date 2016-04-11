@@ -26,6 +26,10 @@ namespace TelemetryTools
             EditorGUILayout.LabelField("Total HTTP Success", TelemetryTools.ConnectionLogger.Instance.TotalHTTPSuccess.ToString());
             EditorGUILayout.LabelField("Total HTTP Errors", TelemetryTools.ConnectionLogger.Instance.TotalHTTPErrors.ToString());
 
+            EditorGUILayout.LabelField("Total Key Server Requests", TelemetryTools.ConnectionLogger.Instance.TotalKeyServerRequestsSent.ToString());
+            EditorGUILayout.LabelField("Total Key Server Success", TelemetryTools.ConnectionLogger.Instance.TotalKeyServerSuccess.ToString());
+            EditorGUILayout.LabelField("Total Key Server Errors", TelemetryTools.ConnectionLogger.Instance.TotalKeyServerErrors.ToString());
+
             EditorGUILayout.Space();
 
             //EditorGUILayout.LabelField("Log Input", Mathf.Round(TelemetryTools.Telemetry.Instance.LoggingRate / 1024) + " KB/s");
