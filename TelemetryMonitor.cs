@@ -52,11 +52,6 @@ namespace TelemetryTools
                 Debug.Log(TelemetryTools.ConnectionLogger.GetPrettyLoggingRate());
         }
 
-        void OnDestroy()
-        {
-           TelemetryTools.Telemetry.Instance.WriteEverything();
-        }
-
         void OnApplicationPause(bool pauseStatus)
         {
             if (pauseStatus)
@@ -67,6 +62,7 @@ namespace TelemetryTools
 
         void OnApplicationQuit()
         {
+            TelemetryTools.Telemetry.Instance.WriteEverything();
             TelemetryTools.Telemetry.Instance.SendEvent(TelemetryTools.Event.ApplicationQuit);
         }
 

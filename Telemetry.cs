@@ -240,11 +240,11 @@ namespace TelemetryTools
 
             if (userDataFilesListDirty)
             {
-                userDataFilesListDirty = !fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename)); ;
+                userDataFilesListDirty = !fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename),append: false); ;
             }
             if (cachedFilesListDirty)
             {
-                cachedFilesListDirty = !fileAccessor.WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename)); ;
+                cachedFilesListDirty = !fileAccessor.WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename), append: false); ;
             }
 
             ConnectionLogger.Instance.Update();
@@ -1019,6 +1019,26 @@ namespace TelemetryTools
             }
         }
 
+        private static bool IsFileLocked(FilePath file)
+        {
+            FileStream stream = null;
+
+            try
+            {
+                File.Open(file,FileMode.Open, FileAccess.Read, FileShare.None);
+            }
+            catch (IOException)
+            {
+                return true;
+            }
+            finally
+            {
+                if (stream != null)
+                    stream.Close();
+            }
+            return false;
+        }
+
         private static bool LoadFromCacheFile(FilePath directory, FilePath filename, out byte[] data)
         {
             data = new byte[0];
@@ -1027,13 +1047,15 @@ namespace TelemetryTools
 
             if (File.Exists(cacheFile))
             {
-                data = File.ReadAllBytes(cacheFile);
-                return true;
+                if (!IsFileLocked(cacheFile))
+                {
+                    data = File.ReadAllBytes(cacheFile);
+                    return true;
+                }
             }
             else
-            {
                 Debug.LogWarning("Attempted to load from from non-existant cache file: " + cacheFile);
-            }
+
             return false;
         }
 
@@ -1239,7 +1261,7 @@ namespace TelemetryTools
 
                         cachedFilesList.Add(file.Name);
                         //TODO: Append rather than rewrite everything
-                        //fileAccessor.WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename));
+                        fileAccessor.WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename));
                         cachedFilesListDirty = true;
                         return true;
                     }

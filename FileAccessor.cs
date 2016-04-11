@@ -4,6 +4,7 @@ using System.IO;
 using System;
 
 using FilePath = System.String;
+using Bytes = System.UInt32;
 using System.Collections.Generic;
 
 namespace TelemetryTools
@@ -11,6 +12,8 @@ namespace TelemetryTools
     public class FileAccessor : MonoBehaviour
     {
 
+        private Bytes dataToWritePerFrame = 1024*5;
+        public Bytes DataToWritePerFrame { get { return dataToWritePerFrame; } set { dataToWritePerFrame = value; } }
         private Dictionary<string, IEnumerator> ienumerators = new Dictionary<FilePath, IEnumerator>();
 
         void Start()
@@ -24,20 +27,23 @@ namespace TelemetryTools
 
         }
 
-        public void WriteDataToFile(byte[] data, FileInfo file)
+        public void WriteDataToFile(byte[] data, FileInfo file, bool append = false)
         {
-            StartCoroutine(WriteDataToFileCoroutine(data, file));
+            StartCoroutine(WriteDataToFileCoroutine(data, file, append));
         }
 
-        IEnumerator WriteDataToFileCoroutine(byte[] data, FileInfo file)
+        IEnumerator WriteDataToFileCoroutine(byte[] data, FileInfo file, bool append = false)
         {
             FileStream fileStream = null;
             try
             {
-                fileStream = file.Open(FileMode.Create);
-                for (int i = 0; i < data.Length; i += 1024)
+                if (append)
+                    fileStream = file.Open(FileMode.Append);
+                else
+                    fileStream = file.Open(FileMode.Create);
+                for (int i = 0; i < data.Length; i += (int) dataToWritePerFrame)
                 {
-                    fileStream.Write(data, i, Math.Min(data.Length - i, 1024));
+                    fileStream.Write(data, i, Math.Min(data.Length - i, (int) dataToWritePerFrame));
                     yield return false;
                 }
             }
@@ -58,7 +64,7 @@ namespace TelemetryTools
         /// <param name="stringList"></param>
         /// <param name="file"></param>
         /// <returns></returns>
-        public bool WriteStringsToFile(string[] stringList, FileInfo file)
+        public bool WriteStringsToFile(string[] stringList, FileInfo file, bool append = false)
         {
             if (ienumerators.ContainsKey(file.FullName))
             {
@@ -71,20 +77,24 @@ namespace TelemetryTools
             }
             else
             {
-                IEnumerator coroutine = WriteStringsToFileCoroutine(stringList, file);
+                IEnumerator coroutine = WriteStringsToFileCoroutine(stringList, file, append);
                 StartCoroutine(coroutine);
                 ienumerators.Add(file.FullName, coroutine);
                 return true;
             }
         }
 
-        private IEnumerator WriteStringsToFileCoroutine(string[] stringList, FileInfo file)
+        private IEnumerator WriteStringsToFileCoroutine(string[] stringList, FileInfo file, bool append = false)
         {
             FileStream fileStream = null;
             byte[] newLine = Telemetry.StringToBytes("\n");
             try
             {
-                fileStream = file.Open(FileMode.Create);
+                
+                if ((append) && (file.Exists))
+                    fileStream = file.Open(FileMode.Append, FileAccess.Write);
+                else
+                    fileStream = file.Open(FileMode.Create);
 
                 int i = 0;
                 foreach (FilePath str in stringList)
