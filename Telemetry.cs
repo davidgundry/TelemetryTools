@@ -698,6 +698,12 @@ namespace TelemetryTools
             SendEvent(name, GetTimeFromStart());
         }
 
+        public static void SendEventIfExists(string name)
+        {
+            if (Exists)
+                Instance.SendEvent(name);
+        }
+
         public void SendKeyValuePair(string key, string value)
         {
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
