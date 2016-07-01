@@ -100,7 +100,13 @@ namespace TelemetryTools
         private const FilePath cacheListFilename = "cache.txt";
         private List<FilePath> cachedFilesList;
         private bool cachedFilesListDirty;
+        private FileAccessor fileAccessor;
+        public FileAccessor FileAccessor { get { return fileAccessor; } set { fileAccessor = value; } }
+#else
+        public object fileAccessor;
 #endif
+
+
         private const Milliseconds uploadCachedFilesDelayOnFailure = 10000;
 
 #if POSTENABLED 
@@ -157,8 +163,6 @@ namespace TelemetryTools
         private KeyManager keyManager;
         public KeyManager KeyManager { get { return keyManager; } }
 
-        private FileAccessor fileAccessor;
-        public FileAccessor FileAccessor { get { return fileAccessor; } set { fileAccessor = value; } }
 
         public int CachedFiles
         {
@@ -215,7 +219,11 @@ namespace TelemetryTools
                     offBufferFull = !SendBuffer(RemoveTrailingNulls(OffBuffer));
 #if POSTENABLED
             keyManager.HandleKeyWWWResponse();
-            HandleUserDataWWWResponse(ref userDatawww, ref userDatawwwBusy, ref userDatawwwKeyID, ref userData, userDatawwwKeyID, keyManager.CurrentKeyID, userDataFilesList,fileAccessor);
+#if LOCALSAVEENABLED
+            HandleUserDataWWWResponse(ref userDatawww, ref userDatawwwBusy, ref userDatawwwKeyID, ref userData, userDatawwwKeyID, keyManager.CurrentKeyID, userDataFilesList, fileAccessor);
+#else
+            HandleUserDataWWWResponse(ref userDatawww, ref userDatawwwBusy, ref userDatawwwKeyID, ref userData, userDatawwwKeyID, keyManager.CurrentKeyID, userDataFilesList);
+#endif
             SaveDataOnWWWErrorIfWeCan();
 
             keyManager.Update(httpPostEnabled);
@@ -237,7 +245,7 @@ namespace TelemetryTools
                             bufferPos = 0;
             }
 #endif
-
+#if LOCALSAVEENABLED
             if (userDataFilesListDirty)
             {
                 userDataFilesListDirty = !fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename),append: false); ;
@@ -246,13 +254,15 @@ namespace TelemetryTools
             {
                 cachedFilesListDirty = !fileAccessor.WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename), append: false); ;
             }
-
+#endif
             ConnectionLogger.Instance.Update();
         }
 
         public void WriteEverything()
         {
-            SaveUserData(keyManager.CurrentKeyID, userData, userDataFilesList,fileAccessor);
+#if LOCALSAVEENABLED
+            SaveUserData(keyManager.CurrentKeyID, userData, userDataFilesList, fileAccessor);
+#endif
 
             SendFrame();
             byte[] dataInBuffer = GetDataInActiveBuffer();
@@ -315,8 +325,10 @@ namespace TelemetryTools
             {
                 if (key == keyManager.CurrentKeyID)
                     SendUserDataByHTTPPost(userDataURL, userData, keyManager.GetKeyByID(key), key, ref userDatawww, ref userDatawwwBusy, ref userDatawwwKeyID);
+#if LOCALSAVEENABLED
                 else
                     SendUserDataByHTTPPost(userDataURL, LoadUserData(key), keyManager.GetKeyByID(key), key, ref userDatawww, ref userDatawwwBusy, ref userDatawwwKeyID);
+#endif
                 return true;
             }
             else
@@ -351,6 +363,7 @@ namespace TelemetryTools
             return userDatawwwBusy; // If www is busy, we successfully found something to upload
         }
 
+        #if LOCALSAVEENABLED
         private bool UploadBacklogOfCacheFiles()
         {
             if (cachedFilesList.Count > 0)
@@ -411,6 +424,7 @@ namespace TelemetryTools
             }
             return true; // If www is busy, we successfully found something to upload
         }
+#endif
 
         private static void SendUserDataByHTTPPost( URL userDataURL,
                                                     Dictionary<UserDataKey,string> userData,
@@ -441,11 +455,15 @@ namespace TelemetryTools
                 Debug.LogWarning("Cannot send user data to server without a key");
         }
 
+
+#if LOCALSAVEENABLED
         public void SaveUserData()
         {
-            SaveUserData(keyManager.CurrentKeyID, userData, userDataFilesList,fileAccessor);
+            SaveUserData(keyManager.CurrentKeyID, userData, userDataFilesList, fileAccessor);
         }
+#endif
 
+        #if LOCALSAVEENABLED
         private static void SaveUserData(KeyID currentKeyID, Dictionary<UserDataKey,string> userData, List<FilePath> userDataFilesList, FileAccessor fileAccessor)
         {
             if (currentKeyID != null)
@@ -486,8 +504,9 @@ namespace TelemetryTools
             else
                 Debug.LogWarning("UserKeyID not valid. You probably have not set a user key.");
         }
+#endif
             
-
+        #if LOCALSAVEENABLED
         public static Dictionary<UserDataKey, string> LoadUserData(KeyID keyIDToLoad)
         {
             if (keyIDToLoad != null)
@@ -505,7 +524,9 @@ namespace TelemetryTools
             }
             return null;
         }
+#endif
 
+#if LOCALSAVEENABLED
         private bool HandleUserDataWWWResponse(ref WWW userDatawww,
                                                     ref bool userDatawwwBusy,
                                                     ref KeyID userDatawwwKeyID,
@@ -514,6 +535,16 @@ namespace TelemetryTools
                                                     KeyID currentKeyID,
                                                     List<string> userDataFilesList,
                                                     FileAccessor fileAccessor)
+#else
+        private bool HandleUserDataWWWResponse(ref WWW userDatawww,
+                                                    ref bool userDatawwwBusy,
+                                                    ref KeyID userDatawwwKeyID,
+                                                    ref Dictionary<UserDataKey, string> userData,
+                                                    KeyID wwwKeyID,
+                                                    KeyID currentKeyID,
+                                                    List<string> userDataFilesList)
+#endif
+
         {
             if (userDatawww != null)
             {
@@ -535,10 +566,12 @@ namespace TelemetryTools
                             userData.Clear();
                         else
                         {
+#if LOCALSAVEENABLED
                             File.Delete(GetFileInfo(userDataDirectory, wwwKeyID.ToString() + "." + userDataFileExtension).FullName);
                             userDataFilesList.Remove(wwwKeyID.ToString() + "." + userDataFileExtension);
                             //fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
                             userDataFilesListDirty = true;
+#endif
                         }
 
                         userDatawwwBusy = false;
@@ -1303,7 +1336,7 @@ namespace TelemetryTools
                         DisposeWWW(ref www, ref wwwData, ref wwwSessionID, ref wwwSequenceID, ref wwwBusy, ref wwwKey, ref wwwKeyID);
                         
 #else
-                        ConnectionLogger.Instance.AddLostData(wwwData.Length);
+                        ConnectionLogger.Instance.AddLostData((uint) wwwData.Length);
                         DisposeWWW(ref www, ref wwwData, ref wwwSessionID, ref wwwSequenceID, ref wwwBusy, ref wwwKey, ref wwwKeyID);
 #endif
                     }

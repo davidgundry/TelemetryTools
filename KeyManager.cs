@@ -158,12 +158,18 @@ namespace TelemetryTools
         {
             if (key < usedKeys)
             {
+#if LOCALSAVEENABLED
                 telemetry.SaveUserData();
+#endif
                 telemetry.SendAllBuffered();
 
                 currentKeyID = key;
                 if (!newKey)
+                {
+#if LOCALSAVEENABLED
                     telemetry.UserData = Telemetry.LoadUserData(currentKeyID);
+#endif
+                }
                 else
                     telemetry.UserData = new Dictionary<UserDataKey, string>();
 

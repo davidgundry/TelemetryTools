@@ -1,4 +1,10 @@
-﻿using UnityEngine;
+﻿#if (!UNITY_WEBPLAYER)
+#define LOCALSAVEENABLED
+#endif
+
+#if LOCALSAVEENABLED
+
+using UnityEngine;
 using System.Collections;
 using System.IO;
 using System;
@@ -120,3 +126,4 @@ namespace TelemetryTools
 
     }
 }
+#endif
