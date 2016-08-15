@@ -32,41 +32,6 @@ using UniqueKey = System.String;
 
 namespace TelemetryTools
 {
-    /// <summary>
-    /// This class contains pre-defined event strings for basic system events.
-    /// </summary>
-    public static class Event
-    {
-        public const string TelemetryStart = "TTStart";
-        public const string Frame = "Frame";
-        public const string ApplicationPause = "AppPause";
-        public const string ApplicationUnpause = "AppUnpause";
-        public const string ApplicationQuit = "AppQuit";
-    }
-
-    /// <summary>
-    /// This class contains pre-defined stream value keys for common system values.
-    /// </summary>
-    public static class Stream
-    {
-        public const string FrameTime = "FT";
-        public const string DeltaTime = "DT";
-        public const string LostData = "LD";
-    }
-
-    /// <summary>
-    /// This class contains pre-defined keys for the user properties sumbitted with a key request.
-    /// </summary>
-    public static class UserPropertyKeys
-    {
-        public const string RequestTime = "RequestTime";
-        public const string Platform = "Platform";
-        public const string WebPlayerURL = "WebPlayerURL";
-        public const string Version = "Version";
-        public const string UnityVersion = "UnityVersion";
-        public const string Genuine = "Genuine";
-    }
-
     public class Telemetry
     {
         /// <summary>
@@ -186,7 +151,6 @@ namespace TelemetryTools
             outboxBuffer2 = new byte[bufferSize];
             frameBuffer = new byte[frameBufferSize];
 
-
             Array.Clear(outboxBuffer1, 0, outboxBuffer1.Length);
             Array.Clear(outboxBuffer2, 0, outboxBuffer2.Length);
             Array.Clear(frameBuffer, 0, frameBuffer.Length);
@@ -196,6 +160,7 @@ namespace TelemetryTools
 #if LOCALSAVEENABLED
             cachedFilesList = ReadStringsFromFile(GetFileInfo(cacheDirectory, cacheListFilename));
             userDataFilesList = ReadStringsFromFile(GetFileInfo(userDataDirectory, userDataListFilename));
+            Debug.Log("Persistant Data Path: " + Application.persistentDataPath);
 #endif
 
             sessionID = (SessionID)PlayerPrefs.GetInt("sessionID");
@@ -206,8 +171,12 @@ namespace TelemetryTools
             this.uploadURL = uploadURL;
             this.userDataURL = userDataURL;
 #endif
+        }
 
-            Debug.Log("Persistant Data Path: " + Application.persistentDataPath);
+        public void Create()
+        {
+            if (instance == null)
+                instance = new Telemetry();
         }
 
         public static void Update() { Instance.UpdateP(); }
@@ -600,7 +569,7 @@ namespace TelemetryTools
             SendFrame();
             //SendStreamValue(TelemetryTools.Stream.FrameTime, System.DateTime.UtcNow.Ticks);
             startTime = (DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond);
-            SendKeyValuePair(Event.TelemetryStart, System.DateTime.UtcNow.ToString("u"));
+            SendKeyValuePair(TelemetryTools.Event.TelemetryStart, System.DateTime.UtcNow.ToString("u"));
             SendEvent(Event.TelemetryStart);
         }
 

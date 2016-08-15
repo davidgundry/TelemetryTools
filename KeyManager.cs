@@ -29,9 +29,9 @@ namespace TelemetryTools
         public int NumberOfKeys { get { if (keys != null) return keys.Length; else return 0; } }
         private uint usedKeys;
         public uint NumberOfUsedKeys { get { return usedKeys; } }
-        private KeyID currentKeyID;
-        public KeyID CurrentKeyID { get { return currentKeyID; } }
-        public UniqueKey CurrentKey { get { if (keys != null) if (currentKeyID != null) if (currentKeyID < keys.Length) return keys[(int)currentKeyID]; return ""; } }
+        public KeyID LatestUsedKey { get { if (NumberOfUsedKeys > 0) return NumberOfUsedKeys - 1; else return null; } }
+        public KeyID CurrentKeyID { get; private set; }
+        public UniqueKey CurrentKey { get { if (keys != null) if (CurrentKeyID != null) if (CurrentKeyID < keys.Length) return keys[(int)CurrentKeyID]; return ""; } }
 
         private URL keyServer;
         public URL KeyServer { get { return keyServer; } set { keyServer = value; } }
@@ -42,12 +42,12 @@ namespace TelemetryTools
         private const Milliseconds requestKeyDelayOnFailure = 10000;
 
         /// <summary>
-        /// Returns true if the we have a currentKeyID set.
+        /// Returns true if the we have a CurrentKeyID set.
         /// </summary>
-        public bool UsingKey { get  { return currentKeyID != null; } }
+        public bool UsingKey { get { return CurrentKeyID != null; } }
 
         /// <summary>
-        /// Returns true if the currentKeyID corresponds to a key we have fetched.
+        /// Returns true if the CurrentKeyID corresponds to a key we have fetched.
         /// </summary>
         public bool HasKey
         {
@@ -75,7 +75,7 @@ namespace TelemetryTools
             Int32.TryParse(PlayerPrefs.GetString("usedkeys"), out usedKeysParsed);
             usedKeys = (uint) usedKeysParsed;
 
-            currentKeyID = null;
+            CurrentKeyID = null;
             
             for (int i = 0; i < NumberOfKeys; i++)
                 keys[i] = PlayerPrefs.GetString("key" + i);
@@ -148,6 +148,14 @@ namespace TelemetryTools
             }
         }
 
+        public void ReuseOrCreateKey()
+        {
+            if (LatestUsedKey != null)
+                ChangeKey((uint)LatestUsedKey);
+            else
+                ChangeKey();
+        }
+                
         public void ChangeKey()
         {
             usedKeys++;
@@ -158,22 +166,25 @@ namespace TelemetryTools
         {
             if (key < usedKeys)
             {
+                if (CurrentKeyID != null)
+                {
 #if LOCALSAVEENABLED
-                telemetry.SaveUserData();
+                    telemetry.SaveUserData();
 #endif
-                telemetry.SendAllBuffered();
+                    telemetry.SendAllBuffered();
+                }
 
-                currentKeyID = key;
+                CurrentKeyID = key;
                 if (!newKey)
                 {
 #if LOCALSAVEENABLED
-                    telemetry.UserData = Telemetry.LoadUserData(currentKeyID);
+                    telemetry.UserData = Telemetry.LoadUserData(CurrentKeyID);
 #endif
                 }
                 else
                     telemetry.UserData = new Dictionary<UserDataKey, string>();
 
-                PlayerPrefs.SetString("currentkeyid", currentKeyID.ToString());
+                PlayerPrefs.SetString("currentkeyid", CurrentKeyID.ToString());
                 PlayerPrefs.SetString("usedkeys", usedKeys.ToString());
                 PlayerPrefs.Save();
 

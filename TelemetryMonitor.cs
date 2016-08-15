@@ -6,6 +6,8 @@ namespace TelemetryTools
     {
         public bool showLogging;
 
+        public Telemetry Telemetry { get { return Telemetry.Instance; } }
+
         void Awake()
         {
             DontDestroyOnLoad(this);
@@ -18,52 +20,119 @@ namespace TelemetryTools
 
         void Start()
         {
-            string baseurl = PlayerPrefs.GetString("URL");
-            TelemetryTools.Telemetry.Instance.UploadURL = baseurl + "/import.php";
-            TelemetryTools.Telemetry.Instance.KeyManager.KeyServer = baseurl + "/key.php";
-            TelemetryTools.Telemetry.Instance.UserDataURL = baseurl + "/userdata.php";
+            
+        }
+
+        public void SetRemoteURLsFromPlayerPrefs()
+        {
+            SetRemoteURLs(PlayerPrefs.GetString("URL"));
+        }
+
+        public void SetRemoteURLs(string baseURL)
+        {
+            if (Telemetry.Exists)
+            {
+                Telemetry.UploadURL = baseURL + "/import.php";
+                Telemetry.KeyManager.KeyServer = baseURL + "/key.php";
+                Telemetry.UserDataURL = baseURL + "/userdata.php";
+            }
+            else
+                throw new TelemetryDoesntExistException();
         }
 
         public void ChangeKey()
         {
-            TelemetryTools.Telemetry.Instance.KeyManager.ChangeKey();
+            if (Telemetry.Exists)
+            {
+                Telemetry.KeyManager.ChangeKey();
+            }
+            else
+                throw new TelemetryDoesntExistException();
         }
 
-        public void ChangeKey(uint key)
+        public void ChangeKey(int key)
         {
-            TelemetryTools.Telemetry.Instance.KeyManager.ChangeKey(key);
+            if (Telemetry.Exists)
+            {
+                if (key < 0)
+                    throw new System.ArgumentOutOfRangeException("All key IDs are positive integers");
+                uint keyId = (uint)key;
+                Telemetry.KeyManager.ChangeKey(keyId);
+            }
+            else 
+                throw new TelemetryDoesntExistException();
+        }
+
+        public string GetKey()
+        {
+            if (Telemetry.Exists)
+            {
+                return Telemetry.KeyManager.CurrentKey;
+            }
+            throw new TelemetryDoesntExistException();
+        }
+
+        public string GetKey(int key)
+        {
+            if (Telemetry.Exists)
+            {
+                if (key < 0)
+                    throw new System.ArgumentOutOfRangeException("All key IDs are positive integers");
+                uint keyId = (uint)key;
+                return Telemetry.KeyManager.GetKeyByID(keyId);
+            }
+            throw new TelemetryDoesntExistException();
         }
 
         public void WriteEverything()
         {
-            TelemetryTools.Telemetry.Instance.WriteEverything();
+            if (Telemetry.Exists)
+            {
+                Telemetry.WriteEverything();
+            }
+            else
+                throw new TelemetryDoesntExistException();
         }
 
         public void UpdateUserData(string key, string value)
         {
-            TelemetryTools.Telemetry.Instance.UpdateUserData(key, value);
+            if (Telemetry.Exists)
+            {
+                Telemetry.UpdateUserData(key, value);
+            }
+            else
+                throw new TelemetryDoesntExistException();
         }
 
         void Update()
         {
-            TelemetryTools.Telemetry.Update();
+            if (Telemetry.Exists)
+            {
+                Telemetry.Update();
 
-            if (showLogging)
-                Debug.Log(TelemetryTools.ConnectionLogger.GetPrettyLoggingRate());
+                if (showLogging)
+                    Debug.Log(TelemetryTools.ConnectionLogger.GetPrettyLoggingRate());
+            }
         }
 
         void OnApplicationPause(bool pauseStatus)
         {
-            if (pauseStatus)
-                TelemetryTools.Telemetry.Instance.SendEvent(TelemetryTools.Event.ApplicationUnpause);
-            else
-                TelemetryTools.Telemetry.Instance.SendEvent(TelemetryTools.Event.ApplicationPause);
+            if (Telemetry.Exists)
+            {
+                if (pauseStatus)
+                    Telemetry.SendEvent(TelemetryTools.Event.ApplicationUnpause);
+                else
+                    Telemetry.SendEvent(TelemetryTools.Event.ApplicationPause);
+            }
         }
 
         void OnApplicationQuit()
         {
-            TelemetryTools.Telemetry.Instance.WriteEverything();
-            TelemetryTools.Telemetry.Instance.SendEvent(TelemetryTools.Event.ApplicationQuit);
+            if (Telemetry.Exists)
+            {
+                Telemetry.WriteEverything();
+                Telemetry.SendEvent(TelemetryTools.Event.ApplicationQuit);
+            }
         }
 
     }
