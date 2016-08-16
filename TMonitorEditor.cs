@@ -16,9 +16,9 @@ namespace TelemetryTools
 
             TelemetryTools.TelemetryMonitor telemetryMonitor = (TelemetryTools.TelemetryMonitor)target;
 
-            EditorGUILayout.LabelField("UploadURL", TelemetryTools.Telemetry.Instance.UploadURL);
+            EditorGUILayout.LabelField("UploadURL", TelemetryTools.Telemetry.Instance.DataConnection.URL);
             EditorGUILayout.LabelField("Key Server", TelemetryTools.Telemetry.Instance.KeyManager.KeyServer);
-            EditorGUILayout.LabelField("User Data URL", TelemetryTools.Telemetry.Instance.UserDataURL);
+            EditorGUILayout.LabelField("User Data URL", TelemetryTools.Telemetry.Instance.UserDataConnection.URL);
 
             EditorGUILayout.Space();
 

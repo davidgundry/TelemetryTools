@@ -32,9 +32,9 @@ namespace TelemetryTools
         {
             if (Telemetry.Exists)
             {
-                Telemetry.UploadURL = baseURL + "/import.php";
+                Telemetry.DataConnection.SetURL(baseURL + "/import.php");
                 Telemetry.KeyManager.KeyServer = baseURL + "/key.php";
-                Telemetry.UserDataURL = baseURL + "/userdata.php";
+                Telemetry.UserDataConnection.SetURL(baseURL + "/userdata.php");
             }
             else
                 throw new TelemetryDoesntExistException();

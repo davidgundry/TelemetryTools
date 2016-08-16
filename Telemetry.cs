@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 using UnityEngine;
+using TelemetryTools.Upload;
 
 #if LOCALSAVEENABLED
 using System.IO;
@@ -78,23 +79,9 @@ namespace TelemetryTools
         // Remote
         private bool httpPostEnabled = false;
         public bool HTTPPostEnabled { get { return httpPostEnabled; } set { httpPostEnabled = value; } }
-        private URL uploadURL;
-        public URL UploadURL { get { return uploadURL; } set { uploadURL = value; } }
 
-        private WWW www;
-        private byte[] wwwData;
-        private SequenceID wwwSequenceID;
-        private SessionID wwwSessionID;
-        private bool wwwBusy = false;
-        private UniqueKey wwwKey;
-        private KeyID wwwKeyID;
-
-        //User Data
-        private WWW userDatawww;
-        private URL userDataURL;
-        public URL UserDataURL { get { return userDataURL; } set { userDataURL = value; } }
-        private bool userDatawwwBusy;
-        private KeyID userDatawwwKeyID;
+        public BufferUploadConnection DataConnection { get; set; }
+        public UserDataUploadConnection UserDataConnection { get; set; }
 #endif
         private Dictionary<UserDataKey,string> userData;
         public Dictionary<UserDataKey, string> UserData { get { return userData; } set { userData = value; } }
@@ -108,25 +95,10 @@ namespace TelemetryTools
 
         private const Milliseconds uploadUserDataDelayOnFailure = 10000;
 
-        private readonly Bytes minSendingThreshold;
-        private const Bytes defaultMinSendingThreshold = 1024;
 
-        // Buffers
-        private const Bytes defaultBufferSize = 1048576;
-        private const Bytes defaultFrameBufferSize = 1024*128;
-        private readonly Bytes bufferSize;
-        private byte[] outboxBuffer1;
-        private byte[] outboxBuffer2;
-        private byte[] ActiveBuffer { get { if (buffer1Active) return outboxBuffer1; else return outboxBuffer2; } }
-        private byte[] OffBuffer { get { if (buffer1Active) return outboxBuffer2; else return outboxBuffer1; } }
-        private int bufferPos = 0;
-        private bool buffer1Active = true;
-        private bool offBufferFull = false;
-        private byte[] frameBuffer;
-        private int frameBufferPos = 0;
 
-        private KeyManager keyManager;
-        public KeyManager KeyManager { get { return keyManager; } }
+        private Buffer buffer;
+        public KeyManager KeyManager { get; private set; }
 
 
         public int CachedFiles
@@ -142,20 +114,11 @@ namespace TelemetryTools
             }
         }
 
-        public Telemetry(URL uploadURL = "", URL keyServer = "", URL userDataURL = "", Bytes bufferSize = defaultBufferSize, Bytes frameBufferSize = defaultFrameBufferSize, Bytes minSendingThreshold = defaultMinSendingThreshold)
+        public Telemetry(URL uploadURL = "", URL keyServer = "", URL userDataURL = "")
         {
-            this.bufferSize = bufferSize;
-            this.minSendingThreshold = minSendingThreshold;
+            buffer = new Buffer();
 
-            outboxBuffer1 = new byte[bufferSize];
-            outboxBuffer2 = new byte[bufferSize];
-            frameBuffer = new byte[frameBufferSize];
-
-            Array.Clear(outboxBuffer1, 0, outboxBuffer1.Length);
-            Array.Clear(outboxBuffer2, 0, outboxBuffer2.Length);
-            Array.Clear(frameBuffer, 0, frameBuffer.Length);
-
-            keyManager = new KeyManager(this, keyServer);
+            KeyManager = new KeyManager(this, keyServer);
 
 #if LOCALSAVEENABLED
             cachedFilesList = ReadStringsFromFile(GetFileInfo(cacheDirectory, cacheListFilename));
@@ -168,8 +131,8 @@ namespace TelemetryTools
             PlayerPrefs.Save();
 
 #if POSTENABLED
-            this.uploadURL = uploadURL;
-            this.userDataURL = userDataURL;
+            DataConnection = new BufferUploadConnection(uploadURL);
+            UserDataConnection = new UserDataUploadConnection(userDataURL);
 #endif
         }
 
@@ -183,19 +146,19 @@ namespace TelemetryTools
 
         private void UpdateP()
         {
-            if (offBufferFull)
-                if (!wwwBusy)
-                    offBufferFull = !SendBuffer(RemoveTrailingNulls(OffBuffer));
+            if (buffer.OffBufferFull)
+                if (!DataConnection.Busy)
+                    buffer.OffBufferFull = !SendBuffer(Utility.RemoveTrailingNulls(buffer.OffBuffer));
 #if POSTENABLED
-            keyManager.HandleKeyWWWResponse();
+            KeyManager.HandleKeyWWWResponse();
 #if LOCALSAVEENABLED
-            HandleUserDataWWWResponse(ref userDatawww, ref userDatawwwBusy, ref userDatawwwKeyID, ref userData, userDatawwwKeyID, keyManager.CurrentKeyID, userDataFilesList, fileAccessor);
+            userDataConnection.HandleUserDataWWWResponse(ref userData, KeyManager.CurrentKeyID, userDataFilesList, fileAccessor);
 #else
-            HandleUserDataWWWResponse(ref userDatawww, ref userDatawwwBusy, ref userDatawwwKeyID, ref userData, userDatawwwKeyID, keyManager.CurrentKeyID, userDataFilesList);
+            UserDataConnection.HandleaWWWResponse(ref userData, KeyManager.CurrentKeyID, userDataFilesList);
 #endif
             SaveDataOnWWWErrorIfWeCan();
 
-            keyManager.Update(httpPostEnabled);
+            KeyManager.Update(httpPostEnabled);
 
             if (httpPostEnabled)
             {
@@ -208,10 +171,10 @@ namespace TelemetryTools
                         ConnectionLogger.Instance.UploadCacheFilesDelay = uploadCachedFilesDelayOnFailure;
 #endif
 
-                if ((!offBufferFull) && (!wwwBusy))
-                    if (bufferPos > minSendingThreshold)
-                        if (SendBuffer(GetDataInActiveBuffer(), httpOnly: true))
-                            bufferPos = 0;
+                if ((!buffer.OffBufferFull) && (!DataConnection.Busy))
+                    if (buffer.ReadyToSend)
+                        if (SendBuffer(buffer.GetDataInActiveBuffer(), httpOnly: true))
+                            buffer.ResetBufferPosition();
             }
 #endif
 #if LOCALSAVEENABLED
@@ -230,36 +193,37 @@ namespace TelemetryTools
         public void WriteEverything()
         {
 #if LOCALSAVEENABLED
-            SaveUserData(keyManager.CurrentKeyID, userData, userDataFilesList, fileAccessor);
+            SaveUserData(KeyManager.CurrentKeyID, userData, userDataFilesList, fileAccessor);
 #endif
 
             SendFrame();
-            byte[] dataInBuffer = GetDataInActiveBuffer();
+            byte[] dataInBuffer = buffer.GetDataInActiveBuffer();
             bool savedBuffer = false;
 
 #if LOCALSAVEENABLED
-            if (keyManager.CurrentKeyID != null)
+            if (KeyManager.CurrentKeyID != null)
             {
                 if (dataInBuffer.Length > 0)
-                    WriteCacheFile(dataInBuffer, sessionID, sequenceID, keyManager.CurrentKeyID);
+                    WriteCacheFile(dataInBuffer, sessionID, sequenceID, KeyManager.CurrentKeyID);
                 savedBuffer = true;
             }
 #endif
 
-            bufferPos = 0;
+            buffer.ResetBufferPosition();
             sequenceID++;
 
 #if POSTENABLED
             SaveDataOnWWWErrorIfWeCan();
 
-            if (www != null)
+            if (DataConnection.Initialised())
             {
     #if LOCALSAVEENABLED
                 if (!www.isDone)
                     WriteCacheFile(wwwData, wwwSessionID, wwwSequenceID, wwwKeyID);
     #endif
-                DisposeWWW(ref www, ref wwwData, ref wwwSessionID, ref wwwSequenceID, ref wwwBusy, ref wwwKey, ref wwwKeyID);
+                DataConnection.Dispose();
             }
+
 
             /*if ((httpPostEnabled) && (!savedBuffer))
             {
@@ -278,11 +242,15 @@ namespace TelemetryTools
         }
 
 
+        public bool AllDataUploaded()
+        {
+            return false;
+        }
 
 
         public void UpdateUserData(UserDataKey key, string value)
         {
-            if (keyManager.CurrentKeyID != null)
+            if (KeyManager.CurrentKeyID != null)
                 userData[key] = value;
             else
                 Debug.LogWarning("Cannot log user data without a unique key.");
@@ -290,13 +258,13 @@ namespace TelemetryTools
 
         private bool UploadUserData(KeyID key)
         {
-            if (keyManager.HasKey)
+            if (KeyManager.HasKey)
             {
-                if (key == keyManager.CurrentKeyID)
-                    SendUserDataByHTTPPost(userDataURL, userData, keyManager.GetKeyByID(key), key, ref userDatawww, ref userDatawwwBusy, ref userDatawwwKeyID);
+                if (key == KeyManager.CurrentKeyID)
+                    UserDataConnection.SendByHTTPPost(userData, KeyManager.GetKeyByID(key), key);
 #if LOCALSAVEENABLED
                 else
-                    SendUserDataByHTTPPost(userDataURL, LoadUserData(key), keyManager.GetKeyByID(key), key, ref userDatawww, ref userDatawwwBusy, ref userDatawwwKeyID);
+                    userDataConnection.SendUserDataByHTTPPost(LoadUserData(key), KeyManager.GetKeyByID(key), key);
 #endif
                 return true;
             }
@@ -312,7 +280,7 @@ namespace TelemetryTools
             if (userDataFilesList.Count > 0)
             {
                 int i = 0;
-                if (!userDatawwwBusy)
+                if (!UserDataConnection.Busy)
                 {
                     string[] separators = new string[1];
                     separators[0] = ".";
@@ -329,7 +297,7 @@ namespace TelemetryTools
 
                 }
             }
-            return userDatawwwBusy; // If www is busy, we successfully found something to upload
+            return UserDataConnection.Busy; // If www is busy, we successfully found something to upload
         }
 
         #if LOCALSAVEENABLED
@@ -345,13 +313,13 @@ namespace TelemetryTools
                 if (!wwwBusy)
                 {
                     ParseCacheFileName(cacheDirectory, cachedFilesList[i], out snID, out sqID, out keyID);
-                    if (keyManager.KeyIsValid(keyID))
+                    if (KeyManager.KeyIsValid(keyID))
                     {
                         if (LoadFromCacheFile(cacheDirectory, cachedFilesList[i], out data))
                         {
                             if ((data.Length > 0) && (snID != null) && (sqID != null) && (keyID != null)) // key here could be empty because it was not known when the file was saved
                             {
-                                SendByHTTPPost(data, snID, sqID, fileExtension, keyManager.GetKeyByID(keyID), keyID, uploadURL, ref www, out wwwData, out wwwSequenceID, out wwwSessionID, out wwwBusy, out wwwKey, out wwwKeyID);
+                                SendByHTTPPost(data, snID, sqID, fileExtension, KeyManager.GetKeyByID(keyID), keyID, uploadURL, ref www, out wwwData, out wwwSequenceID, out wwwSessionID, out wwwBusy, out wwwKey, out wwwKeyID);
                                 File.Delete(GetFileInfo(cacheDirectory, cachedFilesList[i]).FullName);
                                 cachedFilesList.RemoveAt(i);
                                 //fileAccessor.WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename));
@@ -395,40 +363,47 @@ namespace TelemetryTools
         }
 #endif
 
-        private static void SendUserDataByHTTPPost( URL userDataURL,
-                                                    Dictionary<UserDataKey,string> userData,
-                                                    UniqueKey uniqueKey,
-                                                    KeyID keyID,
-                                                    ref WWW userDatawww,
-                                                    ref bool userDatawwwBusy,
-                                                    ref KeyID userDatawwwKeyID)
+        public bool SendBuffer(byte[] data, bool httpOnly = false)
         {
-            if (!String.IsNullOrEmpty(uniqueKey))
+#if POSTENABLED
+            if (httpPostEnabled)
             {
-                if (userData.Count > 0)
-                {
-                    WWWForm form = new WWWForm();
-                    form.AddField("key", uniqueKey);
-                    foreach (string key in userData.Keys)
-                        form.AddField(key, userData[key]);
+                SaveDataOnWWWErrorIfWeCan();
 
-                    userDatawww = new WWW(userDataURL, form);
-                    userDatawwwBusy = true;
-                    userDatawwwKeyID = keyID;
-                    ConnectionLogger.Instance.HTTPRequestSent();
+                if (!DataConnection.Busy)
+                {
+                    if (KeyManager.HasKey)
+                    {
+                        DataConnection.SendByHTTPPost(data, sessionID, sequenceID, fileExtension, KeyManager.CurrentKey, KeyManager.CurrentKeyID);
+                        ConnectionLogger.Instance.AddDataSentByHTTPSinceUpdate((uint)data.Length);
+                        sequenceID++;
+                        return true;
+                    }
                 }
                 else
-                    Debug.LogWarning("Cannot send empty user data to server");
+                    Debug.LogWarning("Cannot send buffer: WWW object busy");
             }
-            else
-                Debug.LogWarning("Cannot send user data to server without a key");
-        }
+#endif
+#if LOCALSAVEENABLED
+            if (!httpOnly)
+            {
+                if (WriteCacheFile(data, sessionID, sequenceID, KeyManager.CurrentKeyID))
+                {
+                    sequenceID++;
+                    return true;
+                }
+            }
+            if (!httpOnly)
+#endif
+            Debug.LogWarning("Could not deal with buffer: " + Utility.BytesToString(data));
 
+            return false;
+        }
 
 #if LOCALSAVEENABLED
         public void SaveUserData()
         {
-            SaveUserData(keyManager.CurrentKeyID, userData, userDataFilesList, fileAccessor);
+            SaveUserData(KeyManager.CurrentKeyID, userData, userDataFilesList, fileAccessor);
         }
 #endif
 
@@ -495,73 +470,20 @@ namespace TelemetryTools
         }
 #endif
 
-#if LOCALSAVEENABLED
-        private bool HandleUserDataWWWResponse(ref WWW userDatawww,
-                                                    ref bool userDatawwwBusy,
-                                                    ref KeyID userDatawwwKeyID,
-                                                    ref Dictionary<UserDataKey, string> userData,
-                                                    KeyID wwwKeyID,
-                                                    KeyID currentKeyID,
-                                                    List<string> userDataFilesList,
-                                                    FileAccessor fileAccessor)
-#else
-        private bool HandleUserDataWWWResponse(ref WWW userDatawww,
-                                                    ref bool userDatawwwBusy,
-                                                    ref KeyID userDatawwwKeyID,
-                                                    ref Dictionary<UserDataKey, string> userData,
-                                                    KeyID wwwKeyID,
-                                                    KeyID currentKeyID,
-                                                    List<string> userDataFilesList)
-#endif
 
-        {
-            if (userDatawww != null)
-            {
-                if (userDatawwwBusy)
-                {
-                    if ((userDatawww.isDone) && (!string.IsNullOrEmpty(userDatawww.error)))
-                    {
-                        Debug.LogWarning("Send User Data Error: " + userDatawww.error);
-                        userDatawwwBusy = false;
-                        ConnectionLogger.Instance.HTTPError();
-                    }
-                    else if (userDatawww.isDone)
-                    {
-                        if (!string.IsNullOrEmpty(userDatawww.text.Trim()))
-                        {
-                            Debug.LogWarning("Response from server: " + userDatawww.text);
-                        }
-                        if (wwwKeyID == currentKeyID)
-                            userData.Clear();
-                        else
-                        {
-#if LOCALSAVEENABLED
-                            File.Delete(GetFileInfo(userDataDirectory, wwwKeyID.ToString() + "." + userDataFileExtension).FullName);
-                            userDataFilesList.Remove(wwwKeyID.ToString() + "." + userDataFileExtension);
-                            //fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
-                            userDataFilesListDirty = true;
-#endif
-                        }
-
-                        userDatawwwBusy = false;
-                        userDatawwwKeyID = null;
-                        ConnectionLogger.Instance.HTTPSuccess();
-                    }
-                }
-            }
-
-            return true;
-        }
 
         public void SendAllBuffered()
         {
             SendFrame();
 
-            if (offBufferFull)
-                offBufferFull = !SendBuffer(RemoveTrailingNulls(OffBuffer));
+            if (buffer.OffBufferFull)
+            {
+                bool success = !SendBuffer(Utility.RemoveTrailingNulls(buffer.OffBuffer));
+                buffer.OffBufferFull = success;
+            }
 
-            SendBuffer(GetDataInActiveBuffer());
-            bufferPos = 0;
+            SendBuffer(buffer.GetDataInActiveBuffer());
+            buffer.ResetBufferPosition();
         }
 
         public void Restart()
@@ -573,107 +495,35 @@ namespace TelemetryTools
             SendEvent(Event.TelemetryStart);
         }
 
-        private bool SendBuffer(byte[] data, bool httpOnly = false)
-        {
-#if POSTENABLED
-            if (httpPostEnabled)
-            {
-                SaveDataOnWWWErrorIfWeCan();
-
-                if (!wwwBusy)
-                {
-                    if (keyManager.HasKey)
-                    {
-                        SendByHTTPPost(data, sessionID, sequenceID, fileExtension, keyManager.CurrentKey, keyManager.CurrentKeyID, uploadURL, ref www, out wwwData, out wwwSequenceID, out wwwSessionID, out wwwBusy, out wwwKey, out wwwKeyID);
-                        ConnectionLogger.Instance.AddDataSentByHTTPSinceUpdate((uint)data.Length);
-                        sequenceID++;
-                        return true;
-                    }
-                }
-                else
-                    Debug.LogWarning("Cannot send buffer: WWW object busy");
-            }
-#endif
-#if LOCALSAVEENABLED
-            if (!httpOnly)
-            {
-                if (WriteCacheFile(data, sessionID, sequenceID, keyManager.CurrentKeyID))
-                {
-                    sequenceID++;
-                    return true;
-                }
-            }
-            if (!httpOnly)
-#endif
-                Debug.LogWarning("Could not deal with buffer: " + BytesToString(data));
-
-            return false;
-        }
-
-        private void BufferData(byte[] data, bool newFrame = false)
-        {
-            if (keyManager.UsingKey)
-            {
-                ConnectionLogger.Instance.AddDataLoggedSinceUpdate((uint)data.Length);
-
-                if (newFrame)
-                {
-                    if (frameID != 0)
-                    {
-                        byte[] endFrame = StringToBytes("}\n"); // newline required for mongo import?
-                        System.Buffer.BlockCopy(endFrame, 0, frameBuffer, frameBufferPos, endFrame.Length);
-                        frameBufferPos += endFrame.Length;
-                    }
-
-                    if (frameBufferPos + bufferPos > bufferSize)
-                    {
-                        if (offBufferFull)
-                        {
-                            Debug.LogWarning("Overflow local telemetry buffer, data overwritten");
-                            ConnectionLogger.Instance.AddLostData((uint)RemoveTrailingNulls(OffBuffer).Length);
-                        }
-
-                        Array.Clear(ActiveBuffer, bufferPos, outboxBuffer1.Length - bufferPos);
-
-                        buffer1Active = !buffer1Active;
-                        offBufferFull = true;
-                        bufferPos = 0;
-                    }
-
-                    System.Buffer.BlockCopy(frameBuffer, 0, ActiveBuffer, bufferPos, frameBufferPos);
-                    bufferPos += frameBufferPos;
-                    frameBufferPos = 0;
-
-                    frameID++;
-                }
-
-                if (frameBufferPos + data.Length < frameBuffer.Length)
-                {
-                    System.Buffer.BlockCopy(data, 0, frameBuffer, frameBufferPos, data.Length);
-                    frameBufferPos += data.Length;
-                }
-                else
-                {
-                    Debug.LogWarning("Overflow frame buffer, data lost");
-                    ConnectionLogger.Instance.AddLostData((uint)data.Length);
-                }
-            }
-            else
-                Debug.LogWarning("Cannot buffer data without it being associated with a unique key. Create a new key.");
-        }
 
         private long GetTimeFromStart()
         {
             return (DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond) -startTime;
         }
 
-        private byte[] GetDataInActiveBuffer()
+        private void BufferToFrameBuffer(byte[] data)
         {
-            byte[] partBuffer = new byte[bufferPos];
-            if (bufferPos > 0)
-                System.Buffer.BlockCopy(ActiveBuffer, 0, partBuffer, 0, partBuffer.Length);
-            return partBuffer;
+            if (KeyManager.UsingKey)
+            {
+                ConnectionLogger.Instance.AddDataLoggedSinceUpdate((uint)data.Length);
+                buffer.BufferToFrameBuffer(data);
+            }
+            else
+                Debug.LogWarning("Cannot buffer data without it being associated with a unique key. Create a new key.");
         }
+
+        private void BufferInNewFrame(byte[] data)
+        {
+            if (KeyManager.UsingKey)
+            {
+                ConnectionLogger.Instance.AddDataLoggedSinceUpdate((uint)data.Length);
+                bool firstFrame = frameID != 0;
+                buffer.BufferInNewFrame(data, firstFrame);
+            }
+            else
+                Debug.LogWarning("Cannot buffer data without it being associated with a unique key. Create a new key.");
+        }
+
 
         public void SendFrame()
         {
@@ -681,7 +531,7 @@ namespace TelemetryTools
             sb.Append("{\"id\":");
             sb.Append(frameID);
             sb.Append("");
-            BufferData(StringToBytes(sb.ToString()), newFrame: true);
+            BufferInNewFrame(Utility.StringToBytes(sb.ToString()));
         }
 
         public void SendEvent(string name, Milliseconds time)
@@ -692,7 +542,7 @@ namespace TelemetryTools
             sb.Append("\":\"");
             sb.Append(name);
             sb.Append("\"");
-            BufferData(StringToBytes(sb.ToString()));
+            BufferToFrameBuffer(Utility.StringToBytes(sb.ToString()));
         }
 
         public void SendEvent(string name)
@@ -714,7 +564,7 @@ namespace TelemetryTools
             sb.Append("\":\"");
             sb.Append(value);
             sb.Append("\"");
-            BufferData(StringToBytes(sb.ToString()));
+            BufferToFrameBuffer(Utility.StringToBytes(sb.ToString()));
         }
 
         public void SendValue(string key, ValueType value, Milliseconds time)
@@ -727,7 +577,7 @@ namespace TelemetryTools
             sb.Append(",\"t\":");
             sb.Append(GetTimeFromStart().ToString());
             sb.Append("}");
-            BufferData(StringToBytes(sb.ToString()));
+            BufferToFrameBuffer(Utility.StringToBytes(sb.ToString()));
         }
 
         public void SendValue(string key, ValueType value)
@@ -743,7 +593,7 @@ namespace TelemetryTools
             sb.Append("\":\"");
             sb.Append(value);
             sb.Append("\"");
-            BufferData(StringToBytes(sb.ToString()));
+            BufferToFrameBuffer(Utility.StringToBytes(sb.ToString()));
         }
 
 
@@ -754,7 +604,7 @@ namespace TelemetryTools
             sb.Append(key);
             sb.Append("\":");
             sb.Append(value.ToString());
-            BufferData(StringToBytes(sb.ToString()));
+            BufferToFrameBuffer(Utility.StringToBytes(sb.ToString()));
         }
 
         public void SendStreamValue(string key, bool value)
@@ -767,7 +617,7 @@ namespace TelemetryTools
                 sb.Append("true");
             else
                 sb.Append("false");
-            BufferData(StringToBytes(sb.ToString()));
+            BufferToFrameBuffer(Utility.StringToBytes(sb.ToString()));
         }
 
         public void SendStreamValueBlock(string key, byte[] values)
@@ -784,7 +634,7 @@ namespace TelemetryTools
             }
             sb.Append("]");
 
-            BufferData(StringToBytes(sb.ToString()));
+            BufferToFrameBuffer(Utility.StringToBytes(sb.ToString()));
         }
 
         public void SendStreamValueBlock(string key, short[] values)
@@ -801,7 +651,7 @@ namespace TelemetryTools
             }
             sb.Append("]");
 
-            BufferData(StringToBytes(sb.ToString()));
+            BufferToFrameBuffer(Utility.StringToBytes(sb.ToString()));
         }
 
         public void SendStreamValueBlock(string key, int[] values)
@@ -818,7 +668,7 @@ namespace TelemetryTools
             }
             sb.Append("]");
 
-            BufferData(StringToBytes(sb.ToString()));
+            BufferToFrameBuffer(Utility.StringToBytes(sb.ToString()));
         }
 
         public static void SendStreamValueBlock(string key, long[] values)
@@ -835,7 +685,7 @@ namespace TelemetryTools
             }
             sb.Append("]");
 
-            Instance.BufferData(StringToBytes(sb.ToString()));
+            Instance.BufferToFrameBuffer(Utility.StringToBytes(sb.ToString()));
         }
 
         public void SendStreamValueBlock(string key, float[] values)
@@ -852,7 +702,7 @@ namespace TelemetryTools
             }
             sb.Append("]");
 
-            BufferData(StringToBytes(sb.ToString()));
+            BufferToFrameBuffer(Utility.StringToBytes(sb.ToString()));
         }
 
         public void SendStreamValueBlock(string key, double[] values)
@@ -869,7 +719,7 @@ namespace TelemetryTools
             }
             sb.Append("]");
 
-            BufferData(StringToBytes(sb.ToString()));
+            BufferToFrameBuffer(Utility.StringToBytes(sb.ToString()));
         }
 
         public void SendByteDataBase64(string key, byte[] data)
@@ -883,7 +733,7 @@ namespace TelemetryTools
             sb.Append(System.Convert.ToBase64String(data));
             sb.Append("\"");
 
-            BufferData(StringToBytes(sb.ToString()));
+            BufferToFrameBuffer(Utility.StringToBytes(sb.ToString()));
         }
 
         //Looking at the Mongo spec, it seems that it doesn't support this sort of encoding, use SendByteDataBase64 instead.
@@ -893,11 +743,11 @@ namespace TelemetryTools
             sb.Append(",\"");
             sb.Append(key);
             sb.Append("\":\"");
-            byte[] b1 = StringToBytes(sb.ToString());
+            byte[] b1 = Utility.StringToBytes(sb.ToString());
 
             byte[] b2 = BitConverter.GetBytes((System.Int32) data.Length);
             byte nullByte = (byte) 0;
-            byte[] b3 = StringToBytes("\"");
+            byte[] b3 = Utility.StringToBytes("\"");
 
             byte[] output = new byte[data.Length + b1.Length + b2.Length + 1 + b3.Length];
             System.Buffer.BlockCopy(b1,0,output,0,b1.Length);
@@ -906,99 +756,12 @@ namespace TelemetryTools
             System.Buffer.BlockCopy(data,0,output,b1.Length+b2.Length+1,data.Length);
             System.Buffer.BlockCopy(b3,0,output,b1.Length+b2.Length+data.Length+1,b3.Length);
 
-            BufferData(output);
+            BufferToFrameBuffer(output);
         }
 
-#if POSTENABLED
-        private static void SendByHTTPPost( byte[] data,
-                                            SessionID sessionID,
-                                            SequenceID sequenceID,
-                                            FilePath fileExtension,
-                                            UniqueKey uniqueKey,
-                                            KeyID uniqueKeyID,
-                                            URL uploadURL,
-                                            ref WWW www,
-                                            out byte[] wwwData,
-                                            out SequenceID wwwSequenceID,
-                                            out SessionID wwwSessionID,
-                                            out bool wwwBusy,
-                                            out UniqueKey wwwKey,
-                                            out KeyID wwwKeyID)
-        {
 
-            if (!String.IsNullOrEmpty(uniqueKey))
-            {
-                WWWForm form = new WWWForm();
-                System.Text.StringBuilder sb = new System.Text.StringBuilder();
-                sb.Append(sessionID);
-                sb.Append(".");
-                sb.Append(sequenceID);
-                sb.Append(".");
-                sb.Append(fileExtension);
-                form.AddField("key", uniqueKey);
-                form.AddField("session", sessionID.ToString());
-                form.AddBinaryData(fileExtension, data, sb.ToString());
-
-                www = new WWW(uploadURL, form);
-                wwwBusy = true;
-
-                wwwData = new byte[data.Length];
-                System.Buffer.BlockCopy(data, 0, wwwData, 0, data.Length);
-                wwwSequenceID = sequenceID;
-                wwwSessionID = sessionID;
-                wwwKey = uniqueKey;
-                wwwKeyID = uniqueKeyID;
-                ConnectionLogger.Instance.HTTPRequestSent();
-            }
-            else
-            {
-                Debug.LogWarning("Cannot send data without a key to the server");
-                wwwBusy = false;
-                wwwData = new byte[0];
-                wwwSessionID = null;
-                wwwSequenceID = null;
-                wwwKey = null;
-                wwwKeyID = null;
-            }
-                
-        }
-
-        private static bool HandleWWWErrors(ref WWW www, ref byte[] wwwData, ref SessionID wwwSessionID, ref SequenceID wwwSequenceID, ref bool wwwBusy, ref UniqueKey wwwKey, ref KeyID wwwKeyID)
-        {
-            if (www != null)
-            {
-                if ((www.isDone) && (!string.IsNullOrEmpty(www.error)))
-                {
-                    Debug.LogWarning("Send Data Error: " + www.error);
-                    ConnectionLogger.Instance.HTTPError();
-                    return false;
-                }
-                else if (www.isDone)
-				{
-					if (!string.IsNullOrEmpty(www.text.Trim()))
-					{
-						Debug.LogWarning ("Response from server: " + www.text);
-					}
-                    DisposeWWW(ref www, ref wwwData, ref wwwSessionID, ref wwwSequenceID, ref wwwBusy, ref wwwKey, ref wwwKeyID);
-				}
-            }
-            ConnectionLogger.Instance.HTTPSuccess();
-            return true;
-        }
-
-        private static void DisposeWWW(ref WWW www, ref byte[] wwwData, ref SessionID wwwSessionID, ref SequenceID wwwSequenceID, ref bool wwwBusy, ref UniqueKey wwwKey, ref KeyID wwwKeyID)
-        {
-            wwwBusy = false;
-            wwwData = new byte[0];
-            wwwSessionID = null;
-            wwwSequenceID = null;
-            wwwKey = null;
-            wwwKeyID = null;
-        }
-#endif
 
 #if LOCALSAVEENABLED
-
 
         private static void ParseCacheFileName(FilePath directory, FilePath filename, out SessionID sessionID, out SequenceID sequenceID, out KeyID keyID)
         {
@@ -1294,19 +1057,19 @@ namespace TelemetryTools
 #if POSTENABLED
         private void SaveDataOnWWWErrorIfWeCan()
         {
-            if (www != null)
+            if (DataConnection.Initialised())
             {
-                if (wwwBusy)
+                if (DataConnection.Busy)
                 {
-                    if (!HandleWWWErrors(ref www, ref wwwData, ref wwwSessionID, ref wwwSequenceID, ref wwwBusy, ref wwwKey, ref wwwKeyID))
+                    if (!DataConnection.HandleWWWResponse())
                     {
 #if LOCALSAVEENABLED
                         WriteCacheFile(wwwData, wwwSessionID, wwwSequenceID, wwwKeyID);
                         DisposeWWW(ref www, ref wwwData, ref wwwSessionID, ref wwwSequenceID, ref wwwBusy, ref wwwKey, ref wwwKeyID);
                         
 #else
-                        ConnectionLogger.Instance.AddLostData((uint) wwwData.Length);
-                        DisposeWWW(ref www, ref wwwData, ref wwwSessionID, ref wwwSequenceID, ref wwwBusy, ref wwwKey, ref wwwKeyID);
+                        ConnectionLogger.Instance.AddLostData((uint) DataConnection.Data.Length);
+                        DataConnection.Dispose();
 #endif
                     }
                 }
@@ -1315,24 +1078,5 @@ namespace TelemetryTools
         }
 #endif
 
-        public static byte[] StringToBytes(string str)
-        {
-            return Encoding.ASCII.GetBytes(str);
-        }
-
-        public static string BytesToString(byte[] bytes)
-        {
-            return Encoding.ASCII.GetString(bytes);
-        }
-
-        public static byte[] RemoveTrailingNulls(byte[] data)
-        {
-            int i=data.Length-1;
-            while (data[i] == 0)
-                i--;
-            byte[] trimmed = new byte[i+2];
-            System.Buffer.BlockCopy(data,0,trimmed,0,trimmed.Length);
-            return trimmed;
-        }
     }
 }
