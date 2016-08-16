@@ -35,25 +35,6 @@ namespace TelemetryTools
 {
     public class Telemetry
     {
-        /// <summary>
-        /// This provides static access to a singleton instance of Telemetry. If the singleton does not yet exists, this creates it. Most interaction with TelemetryTools is via this static accessor.
-        /// </summary>
-        public static Telemetry Instance
-        {
-            get
-            {
-                if (instance == null)
-                    instance = new Telemetry(); 
-                return instance;
-            }
-        }
-        private static Telemetry instance;
-
-        /// <summary>
-        /// Returns true if a Telemetry instance exists.
-        /// </summary>
-        public static bool Exists { get { return instance != null; } }
-
         private Milliseconds startTime = 0;
         private readonly SessionID sessionID = 0;
         private SequenceID sequenceID = 0;
@@ -136,15 +117,7 @@ namespace TelemetryTools
 #endif
         }
 
-        public void Create()
-        {
-            if (instance == null)
-                instance = new Telemetry();
-        }
-
-        public static void Update() { Instance.UpdateP(); }
-
-        private void UpdateP()
+        public void Update()
         {
             if (buffer.OffBufferFull)
                 if (!DataConnection.Busy)
@@ -550,12 +523,6 @@ namespace TelemetryTools
             SendEvent(name, GetTimeFromStart());
         }
 
-        public static void SendEventIfExists(string name)
-        {
-            if (Exists)
-                Instance.SendEvent(name);
-        }
-
         public void SendKeyValuePair(string key, string value)
         {
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
@@ -671,7 +638,7 @@ namespace TelemetryTools
             BufferToFrameBuffer(Utility.StringToBytes(sb.ToString()));
         }
 
-        public static void SendStreamValueBlock(string key, long[] values)
+        public void SendStreamValueBlock(string key, long[] values)
         {
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
             sb.Append(",\"");
@@ -685,7 +652,7 @@ namespace TelemetryTools
             }
             sb.Append("]");
 
-            Instance.BufferToFrameBuffer(Utility.StringToBytes(sb.ToString()));
+            BufferToFrameBuffer(Utility.StringToBytes(sb.ToString()));
         }
 
         public void SendStreamValueBlock(string key, float[] values)

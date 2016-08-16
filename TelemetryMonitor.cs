@@ -6,7 +6,7 @@ namespace TelemetryTools
     {
         public bool showLogging;
 
-        public Telemetry Telemetry { get { return Telemetry.Instance; } }
+        public Telemetry Telemetry { get; set; }
 
         void Awake()
         {
@@ -30,7 +30,7 @@ namespace TelemetryTools
 
         public void SetRemoteURLs(string baseURL)
         {
-            if (Telemetry.Exists)
+            if (Telemetry != null)
             {
                 Telemetry.DataConnection.SetURL(baseURL + "/import.php");
                 Telemetry.KeyManager.KeyServer = baseURL + "/key.php";
@@ -42,7 +42,7 @@ namespace TelemetryTools
 
         public void ChangeKey()
         {
-            if (Telemetry.Exists)
+            if (Telemetry != null)
             {
                 Telemetry.KeyManager.ChangeKey();
             }
@@ -52,7 +52,7 @@ namespace TelemetryTools
 
         public void ChangeKey(int key)
         {
-            if (Telemetry.Exists)
+            if (Telemetry != null)
             {
                 if (key < 0)
                     throw new System.ArgumentOutOfRangeException("All key IDs are positive integers");
@@ -65,7 +65,7 @@ namespace TelemetryTools
 
         public string GetKey()
         {
-            if (Telemetry.Exists)
+            if (Telemetry != null)
             {
                 return Telemetry.KeyManager.CurrentKey;
             }
@@ -74,7 +74,7 @@ namespace TelemetryTools
 
         public string GetKey(int key)
         {
-            if (Telemetry.Exists)
+            if (Telemetry != null)
             {
                 if (key < 0)
                     throw new System.ArgumentOutOfRangeException("All key IDs are positive integers");
@@ -86,7 +86,7 @@ namespace TelemetryTools
 
         public void WriteEverything()
         {
-            if (Telemetry.Exists)
+            if (Telemetry != null)
             {
                 Telemetry.WriteEverything();
             }
@@ -96,7 +96,7 @@ namespace TelemetryTools
 
         public void UpdateUserData(string key, string value)
         {
-            if (Telemetry.Exists)
+            if (Telemetry != null)
             {
                 Telemetry.UpdateUserData(key, value);
             }
@@ -106,7 +106,7 @@ namespace TelemetryTools
 
         void Update()
         {
-            if (Telemetry.Exists)
+            if (Telemetry != null)
             {
                 Telemetry.Update();
 
@@ -117,7 +117,7 @@ namespace TelemetryTools
 
         void OnApplicationPause(bool pauseStatus)
         {
-            if (Telemetry.Exists)
+            if (Telemetry != null)
             {
                 if (pauseStatus)
                     Telemetry.SendEvent(TelemetryTools.Event.ApplicationUnpause);
@@ -128,7 +128,7 @@ namespace TelemetryTools
 
         void OnApplicationQuit()
         {
-            if (Telemetry.Exists)
+            if (Telemetry != null)
             {
                 Telemetry.WriteEverything();
                 Telemetry.SendEvent(TelemetryTools.Event.ApplicationQuit);
