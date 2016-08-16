@@ -18,31 +18,18 @@ namespace TelemetryTools.Upload
 {
     public class BufferUploadConnection : UploadConnection
     {
-        public BufferUploadConnection(URL url)
-            : base(url)
+        public BufferUploadConnection(URL url) : base(url) { }
+
+        public void UploadData(byte[] data, SessionID sessionID, SequenceID sequenceID, FilePath fileExtension, UniqueKey key, KeyID keyID)
         {
-
-        }
-
-
-        public void SendByHTTPPost(byte[] data,
-                                    SessionID sessionID,
-                                    SequenceID sequenceID,
-                                    FilePath fileExtension,
-                                    UniqueKey key,
-                                    KeyID keyID)
-        {
-
             if (!String.IsNullOrEmpty(key))
             {
-                ConnectionLogger.Instance.AddDataSentByHTTPSinceUpdate((uint)data.Length);
                 Send(new BufferUploadRequest(new WWW(URL, CreateWWWForm(key, data, sessionID, sequenceID, fileExtension)), key, keyID, data, sessionID,sequenceID));
             }
             else
             {
                 Debug.LogWarning("Cannot send data without a key to the server");
             }
-
         }
 
         private WWWForm CreateWWWForm(UniqueKey key, byte[] data, SessionID sessionID, SequenceID sequenceID, FilePath fileExtension)
@@ -60,8 +47,5 @@ namespace TelemetryTools.Upload
 
             return form;
         }
-
-
-
     }
 }

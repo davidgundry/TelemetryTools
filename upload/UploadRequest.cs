@@ -35,7 +35,12 @@ namespace TelemetryTools.Upload
 
         public void Dispose()
         {
+            www.Dispose();
+        }
 
+        public virtual Bytes RequestSizeInBytes()
+        {
+            return 0;
         }
     }
 }

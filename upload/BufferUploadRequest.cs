@@ -36,5 +36,9 @@ namespace TelemetryTools.Upload
             this.sequenceID = sequenceID;
         }
 
+        public override Bytes RequestSizeInBytes()
+        {
+            return (uint) Data.Length;
+        }
     }
 }

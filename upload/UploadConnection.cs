@@ -21,31 +21,33 @@ using UniqueKey = System.String;
 
 namespace TelemetryTools.Upload
 {
-    public delegate void UploadErrorHandler(UploadRequest uploadRequest, string error);
-    public delegate void UploadSuccessHandler(UploadRequest uploadRequest, string message = null);
-
     public class UploadConnection
     {
         public bool Busy { get; protected set; }
+        public URL URL { get; private set; }
+        protected UploadRequest UploadRequest { get; private set; }
 
-        public URL URL { get; protected set; }
+        public delegate void ErrorHandler(UploadRequest uploadRequest, string error);
+        public delegate void SuccessHandler(UploadRequest uploadRequest, string message = null);
+
+        public event ErrorHandler OnError;
+        public event SuccessHandler OnSuccess;
 
         public bool NoRequestDelay { get { return RequestDelay <= 0; } }
         protected float RequestDelay { get; set; }
         protected float TotalRequestDelay { get; set; }
+        private const float defaultTotalRequestDelay = 1;
 
         protected int Requests { get; set; }
         protected int Errors { get; private set; }
         protected int Successes { get; private set; }
-
-        protected UploadRequest UploadRequest { get; private set; }
-
-        public event UploadErrorHandler OnError;
-        public event UploadSuccessHandler OnSuccess;
+        public int InvalidResponse { get; set; }
+        protected Bytes BytesSent { get; private set; }
 
         public UploadConnection(URL url)
         {
             URL = url;
+            TotalRequestDelay = defaultTotalRequestDelay;
         }
 
         public void SetURL(URL url)
@@ -70,12 +72,23 @@ namespace TelemetryTools.Upload
             UploadRequest = uploadRequest;
             Busy = true;
             Requests++;
+            BytesSent += uploadRequest.RequestSizeInBytes();
         }
 
         public void Update(float deltaTime)
         {
-            CheckForWWWResponse();
             ReduceRequestDelay(deltaTime);
+            CheckForWWWResponse();
+        }
+
+        public void ResetRequestDelay()
+        {
+            RequestDelay = TotalRequestDelay;
+        }
+
+        public void ClearRequestDelay()
+        {
+            RequestDelay = 0;
         }
 
         private void CheckForWWWResponse()
@@ -84,32 +97,39 @@ namespace TelemetryTools.Upload
             {
                 if ((UploadRequest.WWW.isDone) && (!string.IsNullOrEmpty(UploadRequest.WWW.error)))
                 {
-                    Errors++;
-                    Debug.LogWarning("WWW Error: " + UploadRequest.WWW.error);
-                    OnError.Invoke(UploadRequest,UploadRequest.WWW.error);
+                    Error();
                 }
                 else if (UploadRequest.WWW.isDone)
                 {
-                    Successes++;
-                    if (!string.IsNullOrEmpty(UploadRequest.WWW.text.Trim()))
-                    {
-                        Debug.LogWarning("Response from server: " + UploadRequest.WWW.text);
-                        OnSuccess.Invoke(UploadRequest,UploadRequest.WWW.text);
-                    }
-                    else
-                        OnSuccess.Invoke(UploadRequest);     
+                    Success();
                 }
             }
         }
 
-        public void ResetRequestDelay()
+        private void Success()
         {
-            RequestDelay = TotalRequestDelay;
+            Successes++;
+            if (!string.IsNullOrEmpty(UploadRequest.WWW.text.Trim()))
+            {
+                Debug.LogWarning("Response from server: " + UploadRequest.WWW.text);
+                OnSuccess.Invoke(UploadRequest, UploadRequest.WWW.text);
+            }
+            else
+                OnSuccess.Invoke(UploadRequest);     
+        }
+
+        private void Error()
+        {
+            Errors++;
+            Debug.LogWarning("WWW Error: " + UploadRequest.WWW.error);
+            OnError.Invoke(UploadRequest, UploadRequest.WWW.error);
+            ResetRequestDelay();
         }
 
         private void ReduceRequestDelay(float deltaTime)
         {
-            RequestDelay -= deltaTime;
+            if (RequestDelay > 0)
+                RequestDelay -= deltaTime;
         }
     }
 }
