@@ -1,11 +1,16 @@
 ﻿#if UNITY_EDITOR
+
+#if (!UNITY_WEBPLAYER)
+#define LOCALSAVEENABLED
+#endif
+
 using UnityEngine;
 using System.Collections;
 using UnityEditor;
 
 namespace TelemetryTools.Behaviour
 {
-    [CustomEditor(typeof(TelemetryMonitor))]
+    [CustomEditor(typeof(TelemetryController))]
     public class TMonitorEditor : Editor
     {
         private int keyToChangeTo;
@@ -14,11 +19,11 @@ namespace TelemetryTools.Behaviour
         {
             DrawDefaultInspector();
 
-            TelemetryMonitor telemetryMonitor = (TelemetryMonitor)target;
+            TelemetryController telemetryController = (TelemetryController)target;
 
-            EditorGUILayout.LabelField("UploadURL", telemetryMonitor.Telemetry.DataConnection.URL);
-            EditorGUILayout.LabelField("Key Server", telemetryMonitor.Telemetry.KeyManager.KeyConnection.URL);
-            EditorGUILayout.LabelField("User Data URL", telemetryMonitor.Telemetry.UserDataConnection.URL);
+            EditorGUILayout.LabelField("UploadURL", telemetryController.Telemetry.DataConnection.URL);
+            EditorGUILayout.LabelField("Key Server", telemetryController.Telemetry.KeyManager.KeyConnection.URL);
+            EditorGUILayout.LabelField("User Data URL", telemetryController.Telemetry.UserDataConnection.URL);
 
             EditorGUILayout.Space();
 
@@ -36,15 +41,17 @@ namespace TelemetryTools.Behaviour
             //EditorGUILayout.LabelField("HTTP", Mathf.Round(telemetryMonitor.Telemetry.HTTPPostRate / 1024) + " KB/s");
             //EditorGUILayout.LabelField("File", Mathf.Round(telemetryMonitor.Telemetry.LocalFileSaveRate / 1024) + " KB/s");
             EditorGUILayout.LabelField("Total", Mathf.Round(TelemetryTools.ConnectionLogger.Instance.DataLogged / 1024) + " KB");
-            EditorGUILayout.LabelField("Cached Files", telemetryMonitor.Telemetry.CachedFiles.ToString());
+            EditorGUILayout.LabelField("Cached Files", telemetryController.Telemetry.CachedFiles.ToString());
+#if LOCALSAVEENABLED
             EditorGUILayout.LabelField("User Data Files", telemetryMonitor.Telemetry.UserDataFiles.ToString());
+#endif
             EditorGUILayout.LabelField("Lost Data", Mathf.Round(TelemetryTools.ConnectionLogger.Instance.LostData / 1024) + " KB");
 
             EditorGUILayout.Space();
 
-            EditorGUILayout.LabelField("Used Keys", telemetryMonitor.Telemetry.KeyManager.NumberOfUsedKeys.ToString());
-            EditorGUILayout.LabelField("Keys", telemetryMonitor.Telemetry.KeyManager.NumberOfKeys.ToString());
-            EditorGUILayout.LabelField("Current Key", "ID:" + telemetryMonitor.Telemetry.KeyManager.CurrentKeyID.ToString() + " " + telemetryMonitor.Telemetry.KeyManager.CurrentKey);
+            EditorGUILayout.LabelField("Used Keys", telemetryController.Telemetry.KeyManager.NumberOfUsedKeys.ToString());
+            EditorGUILayout.LabelField("Keys", telemetryController.Telemetry.KeyManager.NumberOfKeys.ToString());
+            EditorGUILayout.LabelField("Current Key", "ID:" + telemetryController.Telemetry.KeyManager.CurrentKeyID.ToString() + " " + telemetryController.Telemetry.KeyManager.CurrentKey);
 
             /*EditorGUILayout.IntField("Key", keyToChangeTo);
             if (GUILayout.Button("Change Key"))
@@ -53,8 +60,8 @@ namespace TelemetryTools.Behaviour
             }*/
             if (GUILayout.Button("New Key"))
             {
-                telemetryMonitor.ChangeKey();
-                telemetryMonitor.UpdateUserData("test", "test");
+                telemetryController.ChangeKey();
+                telemetryController.UpdateUserData("test", "test");
             }
 
             Repaint();

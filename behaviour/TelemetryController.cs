@@ -2,7 +2,7 @@
 
 namespace TelemetryTools.Behaviour
 {
-    public class TelemetryMonitor : MonoBehaviour
+    public class TelemetryController : MonoBehaviour
     {
         public bool showLogging;
 

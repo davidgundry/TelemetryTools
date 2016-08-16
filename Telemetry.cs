@@ -74,10 +74,6 @@ namespace TelemetryTools
         private bool userDataFilesListDirty;
 #endif
 
-
-
-
-
         public int CachedFiles
         {
             get
@@ -227,6 +223,11 @@ namespace TelemetryTools
                 Debug.LogWarning("Cannot log user data without a unique key.");
         }
 
+        public void UploadCurrentUserData()
+        {
+            UploadUserData(KeyManager.CurrentKeyID);
+        }
+
         private bool UploadUserData(KeyID key)
         {
             if (KeyManager.CurrentKeyIsFetched)
@@ -245,9 +246,8 @@ namespace TelemetryTools
                 return false;
             }
         }
-
 #if LOCALSAVEENABLED
-        public bool UploadBacklogOfUserData()
+        public bool UploadBacklogOfCachedUserData()
         {
             if (userDataFilesList.Count > 0)
             {
@@ -1034,7 +1034,7 @@ namespace TelemetryTools
         }
 
         // Used as delegate for UserDataUploadConnection
-        public void RemoveLocalCopyOfUploadedUserData(UploadRequest uploadRequest, string response)
+        private void RemoveLocalCopyOfUploadedUserData(UploadRequest uploadRequest, string response)
         {
             if (uploadRequest.KeyID == KeyManager.CurrentKeyID)
                 UserData.Clear();
