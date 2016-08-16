@@ -111,25 +111,21 @@ namespace TelemetryTools
 
 #if POSTENABLED
             DataConnection = new BufferUploadConnection(uploadURL);
+            DataConnection.OnError += new UploadErrorHandler(SaveDataOnWWWErrorIfWeCan);
             UserDataConnection = new UserDataUploadConnection(userDataURL);
+            UserDataConnection.OnSuccess += new UploadSuccessHandler(HandleUserDataSuccess);
 #endif
         }
 
-        public void Update()
+        public void Update(float deltaTime)
         {
             if (buffer.OffBufferFull)
                 if (!DataConnection.Busy)
                     buffer.OffBufferFull = !SendBuffer(Utility.RemoveTrailingNulls(buffer.OffBuffer));
 #if POSTENABLED
-            KeyManager.HandleKeyWWWResponse();
-#if LOCALSAVEENABLED
-            userDataConnection.HandleUserDataWWWResponse(ref userData, KeyManager.CurrentKeyID, userDataFilesList, fileAccessor);
-#else
-            UserDataConnection.HandleaWWWResponse(ref userData, KeyManager.CurrentKeyID, userDataFilesList);
-#endif
-            SaveDataOnWWWErrorIfWeCan();
-
-            KeyManager.Update(HTTPPostEnabled);
+            UserDataConnection.Update(deltaTime);
+            DataConnection.Update(deltaTime);
+            KeyManager.Update(deltaTime, HTTPPostEnabled);
 
             if (HTTPPostEnabled)
             {
@@ -184,7 +180,6 @@ namespace TelemetryTools
             sequenceID++;
 
 #if POSTENABLED
-            SaveDataOnWWWErrorIfWeCan();
 
             if (DataConnection.Initialised())
             {
@@ -339,14 +334,11 @@ namespace TelemetryTools
 #if POSTENABLED
             if (HTTPPostEnabled)
             {
-                SaveDataOnWWWErrorIfWeCan();
-
                 if (!DataConnection.Busy)
                 {
                     if (KeyManager.KeyInUseIsFetched)
                     {
                         DataConnection.SendByHTTPPost(data, sessionID, sequenceID, fileExtension, KeyManager.CurrentKey, KeyManager.CurrentKeyID);
-                        ConnectionLogger.Instance.AddDataSentByHTTPSinceUpdate((uint)data.Length);
                         sequenceID++;
                         return true;
                     }
@@ -1019,29 +1011,36 @@ namespace TelemetryTools
 
 #endif
 
-#if POSTENABLED
-        private void SaveDataOnWWWErrorIfWeCan()
+        // Used as delegate for BufferUploadConnection
+        private void SaveDataOnWWWErrorIfWeCan(UploadRequest uploadRequest,string error)
         {
-            if (DataConnection.Initialised())
-            {
-                if (DataConnection.Busy)
-                {
-                    if (!DataConnection.HandleWWWResponse())
-                    {
+            BufferUploadRequest bufferUploadRequest = (BufferUploadRequest)uploadRequest;
 #if LOCALSAVEENABLED
-                        WriteCacheFile(wwwData, wwwSessionID, wwwSequenceID, wwwKeyID);
-                        DisposeWWW(ref www, ref wwwData, ref wwwSessionID, ref wwwSequenceID, ref wwwBusy, ref wwwKey, ref wwwKeyID);
+            WriteCacheFile(wwwData, wwwSessionID, wwwSequenceID, wwwKeyID);
+            DisposeWWW(ref www, ref wwwData, ref wwwSessionID, ref wwwSequenceID, ref wwwBusy, ref wwwKey, ref wwwKeyID);
                         
 #else
-                        ConnectionLogger.Instance.AddLostData((uint) DataConnection.Data.Length);
-                        DataConnection.Dispose();
+            ConnectionLogger.Instance.AddLostData((uint)bufferUploadRequest.Data.Length);
+            DataConnection.Dispose();
 #endif
-                    }
-                }
-            }
-            
+
         }
+
+        // Used as delegate for UserDataUploadConnection
+        public void HandleUserDataSuccess(UploadRequest uploadRequest, string response)
+        {
+            if (uploadRequest.KeyID == KeyManager.CurrentKeyID)
+                UserData.Clear();
+            else
+            {
+#if LOCALSAVEENABLED
+                File.Delete(GetFileInfo(userDataDirectory, wwwKeyID.ToString() + "." + userDataFileExtension).FullName);
+                userDataFilesList.Remove(wwwKeyID.ToString() + "." + userDataFileExtension);
+                //fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
+                userDataFilesListDirty = true;
 #endif
+            }
+        }
 
     }
 }

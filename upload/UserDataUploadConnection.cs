@@ -26,6 +26,14 @@ namespace TelemetryTools.Upload
 
         }
 
+        private WWWForm CreateWWWForm(Dictionary<UserDataKey, string> userData, UniqueKey uniqueKey)
+        {
+            WWWForm form = new WWWForm();
+            form.AddField("key", uniqueKey);
+            foreach (string key in userData.Keys)
+                form.AddField(key, userData[key]);
+            return form;
+        }
 
 
         public void SendByHTTPPost(Dictionary<UserDataKey, string> userData,
@@ -36,15 +44,7 @@ namespace TelemetryTools.Upload
             {
                 if (userData.Count > 0)
                 {
-                    WWWForm form = new WWWForm();
-                    form.AddField("key", uniqueKey);
-                    foreach (string key in userData.Keys)
-                        form.AddField(key, userData[key]);
-
-                    WWW = new WWW(URL, form);
-                    Busy = true;
-                    KeyID = keyID;
-                    ConnectionLogger.Instance.HTTPRequestSent();
+                    Send(new UploadRequest(new WWW(URL, CreateWWWForm(userData, uniqueKey)),uniqueKey,keyID));
                 }
                 else
                     Debug.LogWarning("Cannot send empty user data to server");
@@ -53,54 +53,5 @@ namespace TelemetryTools.Upload
                 Debug.LogWarning("Cannot send user data to server without a key");
         }
 
-#if LOCALSAVEENABLED
-        public bool HandleUserDataWWWResponse( ref Dictionary<UserDataKey, string> userData,
-                                                KeyID currentKeyID,
-                                                List<string> userDataFilesList,
-                                                FileAccessor fileAccessor)
-#else
-        public bool HandleaWWWResponse(ref Dictionary<UserDataKey, string> userData,
-                                                KeyID currentKeyID,
-                                                List<string> userDataFilesList)
-#endif
-
-        {
-            if (WWW != null)
-            {
-                if (Busy)
-                {
-                    if ((WWW.isDone) && (!string.IsNullOrEmpty(WWW.error)))
-                    {
-                        Debug.LogWarning("Send User Data Error: " + WWW.error);
-                        Busy = false;
-                        ConnectionLogger.Instance.HTTPError();
-                    }
-                    else if (WWW.isDone)
-                    {
-                        if (!string.IsNullOrEmpty(WWW.text.Trim()))
-                        {
-                            Debug.LogWarning("Response from server: " + WWW.text);
-                        }
-                        if (KeyID == currentKeyID)
-                            userData.Clear();
-                        else
-                        {
-#if LOCALSAVEENABLED
-                            File.Delete(GetFileInfo(userDataDirectory, wwwKeyID.ToString() + "." + userDataFileExtension).FullName);
-                            userDataFilesList.Remove(wwwKeyID.ToString() + "." + userDataFileExtension);
-                            //fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
-                            userDataFilesListDirty = true;
-#endif
-                        }
-
-                        Busy = false;
-                        KeyID = null;
-                        ConnectionLogger.Instance.HTTPSuccess();
-                    }
-                }
-            }
-
-            return true;
-        }
     }
 }

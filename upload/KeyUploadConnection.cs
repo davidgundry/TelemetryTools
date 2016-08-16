@@ -23,40 +23,8 @@ namespace TelemetryTools.Upload
         {
         }
 
-        public void HandleKeyWWWResponse()
-        {
-            bool? success = null;
-            if (Busy)
-            {
-                if (WWW != null)
-                {
-                    UniqueKey newKey = null;
-                    success = GetReturnedKey(ref newKey);
-                    if (success != null)
-                    {
-                        if (success == true)
-                        {
-                            ConnectionLogger.Instance.KeyServerSuccess();
-                            Array.Resize(ref keys, NumberOfKeys + 1);
-                            keys[NumberOfKeys - 1] = newKey;
-                            PlayerPrefs.SetString("key" + (NumberOfKeys - 1), newKey);
-                            PlayerPrefs.SetString("numkeys", NumberOfKeys.ToString());
-                            PlayerPrefs.Save();
-                            ConnectionLogger.Instance.UploadUserDataDelay = 0;
-                            ConnectionLogger.Instance.UploadCacheFilesDelay = 0;
-                        }
-                        else
-                        {
-                            ConnectionLogger.Instance.KeyServerError();
-                            ResetRequestDelay();
-                        }
-                        Busy = false;
-                    }
-                }
-            }
-        }
 
-        public void RequestUniqueKey(KeyValuePair<string, string>[] userData)
+        public void RequestUniqueKey(KeyValuePair<string, string>[] userData, KeyID keyID)
         {
             ConnectionLogger.Instance.KeyServerRequestSent();
             WWWForm form = new WWWForm();
@@ -65,36 +33,9 @@ namespace TelemetryTools.Upload
             foreach (KeyValuePair<string, string> pair in userData)
                 form.AddField(pair.Key, pair.Value);
 
-            Busy = true;
-            WWW = new WWW(URL, form);
+            Send(new UploadRequest(new WWW(URL, form), null, keyID));
         }
 
-        private bool? GetReturnedKey(ref string uniqueKey)
-        {
-            if (WWW != null)
-                if (WWW.isDone)
-                {
-                    if (string.IsNullOrEmpty(WWW.error))
-                    {
-                        if (WWW.text.StartsWith("key:"))
-                        {
-                            uniqueKey = WWW.text.Substring(4);
-                            Debug.Log("Key retrieved: " + uniqueKey);
-                            return true;
-                        }
-                        else
-                        {
-                            Debug.LogWarning("Invalid key retrieved: " + WWW.text);
-                            return false;
-                        }
-                    }
-                    else
-                    {
-                        Debug.LogWarning("Error connecting to key server");
-                        return false;
-                    }
-                }
-            return null;
-        }
+        
     }
 }

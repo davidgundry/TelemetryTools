@@ -21,20 +21,27 @@ using UniqueKey = System.String;
 
 namespace TelemetryTools.Upload
 {
+    public delegate void UploadErrorHandler(UploadRequest uploadRequest, string error);
+    public delegate void UploadSuccessHandler(UploadRequest uploadRequest, string message = null);
+
     public class UploadConnection
     {
-        public WWW WWW { get; protected set; }
         public bool Busy { get; protected set; }
-        public UniqueKey Key { get; protected set; }
-        public KeyID KeyID { get; protected set; }
+
         public URL URL { get; protected set; }
 
         public bool NoRequestDelay { get { return RequestDelay <= 0; } }
         protected float RequestDelay { get; set; }
         protected float TotalRequestDelay { get; set; }
+
         protected int Requests { get; set; }
-        protected int Errors { get; set; }
-        protected int Successes { get; set; }
+        protected int Errors { get; private set; }
+        protected int Successes { get; private set; }
+
+        protected UploadRequest UploadRequest { get; private set; }
+
+        public event UploadErrorHandler OnError;
+        public event UploadSuccessHandler OnSuccess;
 
         public UploadConnection(URL url)
         {
@@ -48,19 +55,61 @@ namespace TelemetryTools.Upload
 
         public bool Initialised()
         {
-            return WWW != null;
+            return UploadRequest.WWW != null;
         }
 
         public virtual void Dispose()
         {
             Busy = false;
-            Key = null;
-            KeyID = null;
+            UploadRequest.Dispose();
+            UploadRequest = null;
+        }
+
+        public void Send(UploadRequest uploadRequest)
+        {
+            UploadRequest = uploadRequest;
+            Busy = true;
+            Requests++;
+        }
+
+        public void Update(float deltaTime)
+        {
+            CheckForWWWResponse();
+            ReduceRequestDelay(deltaTime);
+        }
+
+        private void CheckForWWWResponse()
+        {
+            if (UploadRequest.WWW != null)
+            {
+                if ((UploadRequest.WWW.isDone) && (!string.IsNullOrEmpty(UploadRequest.WWW.error)))
+                {
+                    Errors++;
+                    Debug.LogWarning("WWW Error: " + UploadRequest.WWW.error);
+                    OnError.Invoke(UploadRequest,UploadRequest.WWW.error);
+                }
+                else if (UploadRequest.WWW.isDone)
+                {
+                    Successes++;
+                    if (!string.IsNullOrEmpty(UploadRequest.WWW.text.Trim()))
+                    {
+                        Debug.LogWarning("Response from server: " + UploadRequest.WWW.text);
+                        OnSuccess.Invoke(UploadRequest,UploadRequest.WWW.text);
+                    }
+                    else
+                        OnSuccess.Invoke(UploadRequest);     
+                }
+            }
         }
 
         public void ResetRequestDelay()
         {
             RequestDelay = TotalRequestDelay;
+        }
+
+        private void ReduceRequestDelay(float deltaTime)
+        {
+            RequestDelay -= deltaTime;
         }
     }
 }

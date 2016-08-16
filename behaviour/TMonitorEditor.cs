@@ -3,9 +3,9 @@ using UnityEngine;
 using System.Collections;
 using UnityEditor;
 
-namespace TelemetryTools
+namespace TelemetryTools.Behaviour
 {
-    [CustomEditor(typeof(TelemetryTools.TelemetryMonitor))]
+    [CustomEditor(typeof(TelemetryMonitor))]
     public class TMonitorEditor : Editor
     {
         private int keyToChangeTo;
@@ -14,10 +14,10 @@ namespace TelemetryTools
         {
             DrawDefaultInspector();
 
-            TelemetryTools.TelemetryMonitor telemetryMonitor = (TelemetryTools.TelemetryMonitor)target;
+            TelemetryMonitor telemetryMonitor = (TelemetryMonitor)target;
 
             EditorGUILayout.LabelField("UploadURL", telemetryMonitor.Telemetry.DataConnection.URL);
-            EditorGUILayout.LabelField("Key Server", telemetryMonitor.Telemetry.KeyManager.KeyServer);
+            EditorGUILayout.LabelField("Key Server", telemetryMonitor.Telemetry.KeyManager.KeyConnection.URL);
             EditorGUILayout.LabelField("User Data URL", telemetryMonitor.Telemetry.UserDataConnection.URL);
 
             EditorGUILayout.Space();

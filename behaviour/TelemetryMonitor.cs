@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 
-namespace TelemetryTools
+namespace TelemetryTools.Behaviour
 {
     public class TelemetryMonitor : MonoBehaviour
     {
@@ -108,7 +108,7 @@ namespace TelemetryTools
         {
             if (Telemetry != null)
             {
-                Telemetry.Update();
+                Telemetry.Update(Time.deltaTime);
 
                 if (showLogging)
                     Debug.Log(TelemetryTools.ConnectionLogger.GetPrettyLoggingRate());

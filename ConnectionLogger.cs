@@ -79,8 +79,6 @@ namespace TelemetryTools
                 uploadUserDataDelay -= elapsedTime;
             if (uploadCacheFilesDelay > 0)
                 uploadCacheFilesDelay -= elapsedTime;
-            if (requestKeyDelay > 0)
-                requestKeyDelay -= elapsedTime;
 
             BytesPerSecond bytePerSecond = 1000 / Math.Max(elapsedTime, 1);
             loggingRate = bytePerSecond * dataLoggedSinceUpdate;

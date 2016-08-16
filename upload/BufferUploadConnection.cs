@@ -18,26 +18,12 @@ namespace TelemetryTools.Upload
 {
     public class BufferUploadConnection : UploadConnection
     {
-        public byte[] Data { get; private set; }
-        public SequenceID SequenceID { get; private set; }
-        public SessionID SessionID { get; private set; }
-
         public BufferUploadConnection(URL url)
             : base(url)
         {
 
         }
 
-
-        public override void Dispose()
-        {
-            Busy = false;
-            Data = new byte[0];
-            SessionID = null;
-            SequenceID = null;
-            Key = null;
-            KeyID = null;
-        }
 
         public void SendByHTTPPost(byte[] data,
                                     SessionID sessionID,
@@ -49,75 +35,33 @@ namespace TelemetryTools.Upload
 
             if (!String.IsNullOrEmpty(key))
             {
-                Data = new byte[data.Length];
-                System.Buffer.BlockCopy(data, 0, Data, 0, data.Length);
-                SequenceID = sequenceID;
-                SessionID = sessionID;
-                Key = key;
-                KeyID = keyID;
-
-                WWW = new WWW(URL, CreateWWWForm());
-                Busy = true;
-                Requests++;
+                ConnectionLogger.Instance.AddDataSentByHTTPSinceUpdate((uint)data.Length);
+                Send(new BufferUploadRequest(new WWW(URL, CreateWWWForm(key, data, sessionID, sequenceID, fileExtension)), key, keyID, data, sessionID,sequenceID));
             }
             else
             {
                 Debug.LogWarning("Cannot send data without a key to the server");
-                Dispose();
             }
 
         }
 
-        private WWWForm CreateWWWForm()
+        private WWWForm CreateWWWForm(UniqueKey key, byte[] data, SessionID sessionID, SequenceID sequenceID, FilePath fileExtension)
         {
-            string fileExtension = "telemetry";
-
             WWWForm form = new WWWForm();
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
-            sb.Append(SessionID);
+            sb.Append(sessionID);
             sb.Append(".");
-            sb.Append(SequenceID);
+            sb.Append(sequenceID);
             sb.Append(".");
             sb.Append(fileExtension);
-            form.AddField("key", Key);
-            form.AddField("session", SessionID.ToString());
-            form.AddBinaryData(fileExtension, Data, sb.ToString());
+            form.AddField("key", key);
+            form.AddField("session", sessionID.ToString());
+            form.AddBinaryData(fileExtension, data, sb.ToString());
 
             return form;
         }
 
-        public bool HandleWWWResponse()
-        {
-            if (WWW != null)
-            {
-                if ((WWW.isDone) && (!string.IsNullOrEmpty(WWW.error)))
-                {
-                    WWWError();
-                    return false;
-                }
-                else if (WWW.isDone)
-                {
-                    WWWSuccess();
-                }
-            }
-            
-            return true;
-        }
 
-        private void WWWError()
-        {
-            Debug.LogWarning("Send Data Error: " + WWW.error);
-            Errors++;
-        }
 
-        private void WWWSuccess()
-        {
-            if (!string.IsNullOrEmpty(WWW.text.Trim()))
-            {
-                Debug.LogWarning("Response from server: " + WWW.text);
-            }
-            Dispose();
-            Successes++;
-        }
     }
 }

@@ -62,6 +62,7 @@ namespace TelemetryTools
 
 #if POSTENABLED
             KeyConnection = new KeyUploadConnection(keyServer);
+            KeyConnection.OnSuccess += new UploadSuccessHandler(HandleKeySuccess);
             LoadFromPlayerPrefs();
 #endif
         }
@@ -82,13 +83,14 @@ namespace TelemetryTools
                 keys[i] = PlayerPrefs.GetString("key" + i);
         }
 
-        public void Update(bool httpPostEnabled)
+        public void Update(float deltaTime, bool httpPostEnabled)
         {
             if (httpPostEnabled)
+            {
+                KeyConnection.Update(deltaTime);
                 if (KeyConnection.NoRequestDelay)
                     RequestKeyIfNone(UserProperties);
-                else
-                    KeyConnection.ReduceRequestDelay();
+            }
         }
 
         public static KeyValuePair<UserDataKey, string>[] UserProperties
@@ -166,9 +168,50 @@ namespace TelemetryTools
             if (!KeyConnection.Busy)
                 if (NumberOfUsedKeys > NumberOfKeys)
                 {
-                    KeyConnection.RequestUniqueKey(userData);
+                    KeyConnection.RequestUniqueKey(userData, (uint) NumberOfUsedKeys);
                 }
         }
-       
+
+
+
+
+
+
+        private void HandleKeySuccess(UploadRequest uploadRequest, string message)
+        {
+            UniqueKey newKey = GetReturnedKey(message);;
+            if (newKey != null)
+            {
+                ConnectionLogger.Instance.KeyServerSuccess();
+                Array.Resize(ref keys, NumberOfKeys + 1);
+                keys[NumberOfKeys - 1] = newKey;
+                PlayerPrefs.SetString("key" + (NumberOfKeys - 1), newKey);
+                PlayerPrefs.SetString("numkeys", NumberOfKeys.ToString());
+                PlayerPrefs.Save();
+                ConnectionLogger.Instance.UploadUserDataDelay = 0;
+                ConnectionLogger.Instance.UploadCacheFilesDelay = 0;
+            }
+            else
+            {
+                ConnectionLogger.Instance.KeyServerError();
+                KeyConnection.ResetRequestDelay();
+            }
+        }
+
+        private UniqueKey GetReturnedKey(string message)
+        {
+            if (message.StartsWith("key:"))
+            {
+                UniqueKey uniqueKey = message.Substring(4);
+                Debug.Log("Key retrieved: " + uniqueKey);
+                return uniqueKey;
+            }
+            else
+            {
+                Debug.LogWarning("Invalid key retrieved: " + message);
+                return null;
+            }
+        }
+
     }
 }
