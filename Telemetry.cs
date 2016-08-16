@@ -35,6 +35,9 @@ namespace TelemetryTools
 {
     public class Telemetry
     {
+        private Buffer buffer;
+        public KeyManager KeyManager { get; private set; }
+
         private Milliseconds startTime = 0;
         private readonly SessionID sessionID = 0;
         private SequenceID sequenceID = 0;
@@ -61,6 +64,7 @@ namespace TelemetryTools
 
         private Dictionary<UserDataKey,string> userData;
         public Dictionary<UserDataKey, string> UserData { get { return userData; } set { userData = value; } }
+#if LOCALSAVEENABLED
         private const FilePath userDataDirectory = "userdata";
         private const FilePath userDataFileExtension = "userdata";
         private const FilePath userDataListFilename = "userdata.txt";
@@ -68,9 +72,10 @@ namespace TelemetryTools
         public List<FilePath> UserDataFilesList { get { return userDataFilesList; } }
         public int UserDataFiles { get { if (userDataFilesList != null) return userDataFilesList.Count; return 0; } }
         private bool userDataFilesListDirty;
+#endif
 
-        private Buffer buffer;
-        public KeyManager KeyManager { get; private set; }
+
+
 
 
         public int CachedFiles
@@ -241,6 +246,7 @@ namespace TelemetryTools
             }
         }
 
+#if LOCALSAVEENABLED
         public bool UploadBacklogOfUserData()
         {
             if (userDataFilesList.Count > 0)
@@ -265,6 +271,7 @@ namespace TelemetryTools
             }
             return UserDataConnection.Busy; // If www is busy, we successfully found something to upload
         }
+#endif
 
         #if LOCALSAVEENABLED
         private bool UploadBacklogOfCacheFiles()
