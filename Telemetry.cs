@@ -57,13 +57,11 @@ namespace TelemetryTools
         private const Milliseconds uploadCachedFilesDelayOnFailure = 10000;
 
 #if POSTENABLED 
-        // Remote
-        private bool httpPostEnabled = false;
-        public bool HTTPPostEnabled { get { return httpPostEnabled; } set { httpPostEnabled = value; } }
-
+        public bool HTTPPostEnabled { get; set; }
         public BufferUploadConnection DataConnection { get; set; }
         public UserDataUploadConnection UserDataConnection { get; set; }
 #endif
+
         private Dictionary<UserDataKey,string> userData;
         public Dictionary<UserDataKey, string> UserData { get { return userData; } set { userData = value; } }
         private const FilePath userDataDirectory = "userdata";
@@ -131,9 +129,9 @@ namespace TelemetryTools
 #endif
             SaveDataOnWWWErrorIfWeCan();
 
-            KeyManager.Update(httpPostEnabled);
+            KeyManager.Update(HTTPPostEnabled);
 
-            if (httpPostEnabled)
+            if (HTTPPostEnabled)
             {
 #if LOCALSAVEENABLED
                 if ((!userDatawwwBusy) && (ConnectionLogger.Instance.UploadUserDataDelay <= 0))
@@ -231,7 +229,7 @@ namespace TelemetryTools
 
         private bool UploadUserData(KeyID key)
         {
-            if (KeyManager.HasKey)
+            if (KeyManager.KeyInUseIsFetched)
             {
                 if (key == KeyManager.CurrentKeyID)
                     UserDataConnection.SendByHTTPPost(userData, KeyManager.GetKeyByID(key), key);
@@ -339,13 +337,13 @@ namespace TelemetryTools
         public bool SendBuffer(byte[] data, bool httpOnly = false)
         {
 #if POSTENABLED
-            if (httpPostEnabled)
+            if (HTTPPostEnabled)
             {
                 SaveDataOnWWWErrorIfWeCan();
 
                 if (!DataConnection.Busy)
                 {
-                    if (KeyManager.HasKey)
+                    if (KeyManager.KeyInUseIsFetched)
                     {
                         DataConnection.SendByHTTPPost(data, sessionID, sequenceID, fileExtension, KeyManager.CurrentKey, KeyManager.CurrentKeyID);
                         ConnectionLogger.Instance.AddDataSentByHTTPSinceUpdate((uint)data.Length);
@@ -476,7 +474,7 @@ namespace TelemetryTools
 
         private void BufferToFrameBuffer(byte[] data)
         {
-            if (KeyManager.UsingKey)
+            if (KeyManager.KeyInUse)
             {
                 ConnectionLogger.Instance.AddDataLoggedSinceUpdate((uint)data.Length);
                 buffer.BufferToFrameBuffer(data);
@@ -487,7 +485,7 @@ namespace TelemetryTools
 
         private void BufferInNewFrame(byte[] data)
         {
-            if (KeyManager.UsingKey)
+            if (KeyManager.KeyInUse)
             {
                 ConnectionLogger.Instance.AddDataLoggedSinceUpdate((uint)data.Length);
                 bool firstFrame = frameID != 0;

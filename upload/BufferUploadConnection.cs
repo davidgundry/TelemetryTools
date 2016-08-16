@@ -43,45 +43,47 @@ namespace TelemetryTools.Upload
                                     SessionID sessionID,
                                     SequenceID sequenceID,
                                     FilePath fileExtension,
-                                    UniqueKey uniqueKey,
-                                    KeyID uniqueKeyID)
+                                    UniqueKey key,
+                                    KeyID keyID)
         {
 
-            if (!String.IsNullOrEmpty(uniqueKey))
+            if (!String.IsNullOrEmpty(key))
             {
-                WWWForm form = new WWWForm();
-                System.Text.StringBuilder sb = new System.Text.StringBuilder();
-                sb.Append(sessionID);
-                sb.Append(".");
-                sb.Append(sequenceID);
-                sb.Append(".");
-                sb.Append(fileExtension);
-                form.AddField("key", uniqueKey);
-                form.AddField("session", sessionID.ToString());
-                form.AddBinaryData(fileExtension, data, sb.ToString());
-
-                WWW = new WWW(URL, form);
-                Busy = true;
-
                 Data = new byte[data.Length];
                 System.Buffer.BlockCopy(data, 0, Data, 0, data.Length);
                 SequenceID = sequenceID;
                 SessionID = sessionID;
-                Key = uniqueKey;
-                KeyID = uniqueKeyID;
-                ConnectionLogger.Instance.HTTPRequestSent();
+                Key = key;
+                KeyID = keyID;
+
+                WWW = new WWW(URL, CreateWWWForm());
+                Busy = true;
+                Requests++;
             }
             else
             {
                 Debug.LogWarning("Cannot send data without a key to the server");
-                Busy = false;
-                Data = new byte[0];
-                SessionID = null;
-                SequenceID = null;
-                Key = null;
-                KeyID = null;
+                Dispose();
             }
 
+        }
+
+        private WWWForm CreateWWWForm()
+        {
+            string fileExtension = "telemetry";
+
+            WWWForm form = new WWWForm();
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            sb.Append(SessionID);
+            sb.Append(".");
+            sb.Append(SequenceID);
+            sb.Append(".");
+            sb.Append(fileExtension);
+            form.AddField("key", Key);
+            form.AddField("session", SessionID.ToString());
+            form.AddBinaryData(fileExtension, Data, sb.ToString());
+
+            return form;
         }
 
         public bool HandleWWWResponse()
@@ -90,21 +92,32 @@ namespace TelemetryTools.Upload
             {
                 if ((WWW.isDone) && (!string.IsNullOrEmpty(WWW.error)))
                 {
-                    Debug.LogWarning("Send Data Error: " + WWW.error);
-                    ConnectionLogger.Instance.HTTPError();
+                    WWWError();
                     return false;
                 }
                 else if (WWW.isDone)
                 {
-                    if (!string.IsNullOrEmpty(WWW.text.Trim()))
-                    {
-                        Debug.LogWarning("Response from server: " + WWW.text);
-                    }
-                    Dispose();
+                    WWWSuccess();
                 }
             }
-            ConnectionLogger.Instance.HTTPSuccess();
+            
             return true;
+        }
+
+        private void WWWError()
+        {
+            Debug.LogWarning("Send Data Error: " + WWW.error);
+            Errors++;
+        }
+
+        private void WWWSuccess()
+        {
+            if (!string.IsNullOrEmpty(WWW.text.Trim()))
+            {
+                Debug.LogWarning("Response from server: " + WWW.text);
+            }
+            Dispose();
+            Successes++;
         }
     }
 }

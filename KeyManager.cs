@@ -17,6 +17,7 @@ using UserDataKey = System.String;
 using UniqueKey = System.String;
 using System.Collections.Generic;
 
+using TelemetryTools.Upload;
 
 namespace TelemetryTools
 {
@@ -27,33 +28,28 @@ namespace TelemetryTools
         private UniqueKey[] keys;
         public UniqueKey[] Keys { get { return keys; } }
         public int NumberOfKeys { get { if (keys != null) return keys.Length; else return 0; } }
-        private uint usedKeys;
-        public uint NumberOfUsedKeys { get { return usedKeys; } }
+        public uint NumberOfUsedKeys { get; private set; }
         public KeyID LatestUsedKey { get { if (NumberOfUsedKeys > 0) return NumberOfUsedKeys - 1; else return null; } }
         public KeyID CurrentKeyID { get; private set; }
         public UniqueKey CurrentKey { get { if (keys != null) if (CurrentKeyID != null) if (CurrentKeyID < keys.Length) return keys[(int)CurrentKeyID]; return ""; } }
 
-        private URL keyServer;
-        public URL KeyServer { get { return keyServer; } set { keyServer = value; } }
-
-        private WWW keywww;
-        private bool keywwwBusy;
+        public KeyUploadConnection KeyConnection { get; set; }
 
         private const Milliseconds requestKeyDelayOnFailure = 10000;
 
         /// <summary>
         /// Returns true if the we have a CurrentKeyID set.
         /// </summary>
-        public bool UsingKey { get { return CurrentKeyID != null; } }
+        public bool KeyInUse { get { return CurrentKeyID != null; } }
 
         /// <summary>
         /// Returns true if the CurrentKeyID corresponds to a key we have fetched.
         /// </summary>
-        public bool HasKey
+        public bool KeyInUseIsFetched
         {
             get
             {
-                if (UsingKey)
+                if (KeyInUse)
                     return CurrentKeyID < NumberOfKeys;
                 return false;
             }
@@ -65,28 +61,34 @@ namespace TelemetryTools
             keys = new string[0];
 
 #if POSTENABLED
-            this.keyServer = keyServer;
+            KeyConnection = new KeyUploadConnection(keyServer);
+            LoadFromPlayerPrefs();
+#endif
+        }
 
+        private void LoadFromPlayerPrefs()
+        {
             int numKeys = 0;
             if (Int32.TryParse(PlayerPrefs.GetString("numkeys"), out numKeys))
                 keys = new string[numKeys];
 
             int usedKeysParsed = 0;
             Int32.TryParse(PlayerPrefs.GetString("usedkeys"), out usedKeysParsed);
-            usedKeys = (uint) usedKeysParsed;
+            NumberOfUsedKeys = (uint)usedKeysParsed;
 
             CurrentKeyID = null;
-            
+
             for (int i = 0; i < NumberOfKeys; i++)
                 keys[i] = PlayerPrefs.GetString("key" + i);
-#endif
         }
 
         public void Update(bool httpPostEnabled)
         {
             if (httpPostEnabled)
-                if (ConnectionLogger.Instance.RequestKeyDelay <= 0)
+                if (KeyConnection.NoRequestDelay)
                     RequestKeyIfNone(UserProperties);
+                else
+                    KeyConnection.ReduceRequestDelay();
         }
 
         public static KeyValuePair<UserDataKey, string>[] UserProperties
@@ -115,39 +117,6 @@ namespace TelemetryTools
             return id < NumberOfKeys;
         }
 
-        public void HandleKeyWWWResponse()
-        {
-            bool? success = null;
-            if (keywwwBusy)
-            {
-                if (keywww != null)
-                {
-                    UniqueKey newKey = null;
-                    success = GetReturnedKey(ref keywww, ref newKey);
-                    if (success != null)
-                    {
-                        if (success == true)
-                        {
-                            ConnectionLogger.Instance.KeyServerSuccess();
-                            Array.Resize(ref keys, NumberOfKeys + 1);
-                            keys[NumberOfKeys - 1] = newKey;
-                            PlayerPrefs.SetString("key" + (NumberOfKeys - 1), newKey);
-                            PlayerPrefs.SetString("numkeys", NumberOfKeys.ToString());
-                            PlayerPrefs.Save();
-                            ConnectionLogger.Instance.UploadUserDataDelay = 0;
-                            ConnectionLogger.Instance.UploadCacheFilesDelay = 0;
-                        }
-                        else
-                        {
-                            ConnectionLogger.Instance.KeyServerError();
-                            ConnectionLogger.Instance.RequestKeyDelay = requestKeyDelayOnFailure;
-                        }
-                        keywwwBusy = false;
-                    }
-                }
-            }
-        }
-
         public void ReuseOrCreateKey()
         {
             if (LatestUsedKey != null)
@@ -158,13 +127,13 @@ namespace TelemetryTools
                 
         public void ChangeKey()
         {
-            usedKeys++;
-            ChangeKey(usedKeys - 1, newKey: true);
+            NumberOfUsedKeys++;
+            ChangeKey(NumberOfUsedKeys - 1, newKey: true);
         }
 
         public void ChangeKey(uint key, bool newKey = false)
         {
-            if (key < usedKeys)
+            if (key < NumberOfUsedKeys)
             {
                 if (CurrentKeyID != null)
                 {
@@ -185,7 +154,7 @@ namespace TelemetryTools
                     telemetry.UserData = new Dictionary<UserDataKey, string>();
 
                 PlayerPrefs.SetString("currentkeyid", CurrentKeyID.ToString());
-                PlayerPrefs.SetString("usedkeys", usedKeys.ToString());
+                PlayerPrefs.SetString("usedkeys", NumberOfUsedKeys.ToString());
                 PlayerPrefs.Save();
 
                 telemetry.Restart();
@@ -194,52 +163,12 @@ namespace TelemetryTools
 
         private void RequestKeyIfNone(KeyValuePair<UserDataKey, string>[] userData)
         {
-            if (!keywwwBusy)
-                if (usedKeys > NumberOfKeys)
+            if (!KeyConnection.Busy)
+                if (NumberOfUsedKeys > NumberOfKeys)
                 {
-                    keywww = RequestUniqueKey(this.keyServer, userData, ref keywwwBusy);
-                    ConnectionLogger.Instance.KeyServerRequestSent();
+                    KeyConnection.RequestUniqueKey(userData);
                 }
         }
-
-        private static WWW RequestUniqueKey(URL keyServer, KeyValuePair<string, string>[] userData, ref bool keyWWWBusy)
-        {
-            WWWForm form = new WWWForm();
-            form.AddField(UserPropertyKeys.RequestTime, System.DateTime.UtcNow.ToString("u"));
-
-            foreach (KeyValuePair<string, string> pair in userData)
-                form.AddField(pair.Key, pair.Value);
-
-            keyWWWBusy = true;
-            return new WWW(keyServer, form);
-        }
-
-        private static bool? GetReturnedKey(ref WWW keywww, ref string uniqueKey)
-        {
-            if (keywww != null)
-                if (keywww.isDone)
-                {
-                    if (string.IsNullOrEmpty(keywww.error))
-                    {
-                        if (keywww.text.StartsWith("key:"))
-                        {
-                            uniqueKey = keywww.text.Substring(4);
-                            Debug.Log("Key retrieved: " + uniqueKey);
-                            return true;
-                        }
-                        else
-                        {
-                            Debug.LogWarning("Invalid key retrieved: " + keywww.text);
-                            return false;
-                        }
-                    }
-                    else
-                    {
-                        Debug.LogWarning("Error connecting to key server");
-                        return false;
-                    }
-                }
-            return null;
-        }
+       
     }
 }

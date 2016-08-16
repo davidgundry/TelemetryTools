@@ -29,6 +29,13 @@ namespace TelemetryTools.Upload
         public KeyID KeyID { get; protected set; }
         public URL URL { get; protected set; }
 
+        public bool NoRequestDelay { get { return RequestDelay <= 0; } }
+        protected float RequestDelay { get; set; }
+        protected float TotalRequestDelay { get; set; }
+        protected int Requests { get; set; }
+        protected int Errors { get; set; }
+        protected int Successes { get; set; }
+
         public UploadConnection(URL url)
         {
             URL = url;
@@ -49,6 +56,11 @@ namespace TelemetryTools.Upload
             Busy = false;
             Key = null;
             KeyID = null;
+        }
+
+        public void ResetRequestDelay()
+        {
+            RequestDelay = TotalRequestDelay;
         }
     }
 }

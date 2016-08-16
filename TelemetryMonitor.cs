@@ -33,7 +33,7 @@ namespace TelemetryTools
             if (Telemetry != null)
             {
                 Telemetry.DataConnection.SetURL(baseURL + "/import.php");
-                Telemetry.KeyManager.KeyServer = baseURL + "/key.php";
+                Telemetry.KeyManager.KeyConnection.SetURL(baseURL + "/key.php");
                 Telemetry.UserDataConnection.SetURL(baseURL + "/userdata.php");
             }
             else
