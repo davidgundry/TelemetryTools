@@ -8,10 +8,23 @@ using UnityEngine;
 using System.Collections;
 using System.IO;
 using System;
-
-using FilePath = System.String;
-using Bytes = System.UInt32;
 using System.Collections.Generic;
+
+using BytesPerSecond = System.Single;
+using Bytes = System.UInt32;
+using Megabytes = System.UInt32;
+using Milliseconds = System.Int64;
+using FilePath = System.String;
+using URL = System.String;
+using SequenceID = System.Nullable<System.UInt32>;
+using SessionID = System.Nullable<System.UInt32>;
+using KeyID = System.Nullable<System.UInt32>;
+using FrameID = System.UInt32;
+using UserDataKey = System.String;
+using UniqueKey = System.String;
+
+
+using TelemetryTools.Behaviour;
 
 namespace TelemetryTools
 {
@@ -22,16 +35,10 @@ namespace TelemetryTools
         public Bytes DataToWritePerFrame { get { return dataToWritePerFrame; } set { dataToWritePerFrame = value; } }
         private Dictionary<string, IEnumerator> ienumerators = new Dictionary<FilePath, IEnumerator>();
 
-        void Start()
-        {
-            TelemetryTools.Telemetry.Instance.FileAccessor = this;
-        }
 
-        // Update is called once per frame
-        void Update()
-        {
-
-        }
+        public const FilePath userDataDirectory = "userdata";
+        public const FilePath userDataFileExtension = "userdata";
+        public const FilePath userDataListFilename = "userdata.txt";
 
         public void WriteDataToFile(byte[] data, FileInfo file, bool append = false)
         {
@@ -93,7 +100,7 @@ namespace TelemetryTools
         private IEnumerator WriteStringsToFileCoroutine(string[] stringList, FileInfo file, bool append = false)
         {
             FileStream fileStream = null;
-            byte[] newLine = Telemetry.StringToBytes("\n");
+            byte[] newLine = Utility.StringToBytes("\n");
             try
             {
                 
@@ -105,7 +112,7 @@ namespace TelemetryTools
                 int i = 0;
                 foreach (FilePath str in stringList)
                 {
-                    byte[] bytes = Telemetry.StringToBytes(str);
+                    byte[] bytes = Utility.StringToBytes(str);
                     fileStream.Write(bytes, 0, bytes.Length);
                     fileStream.Write(newLine, 0, newLine.Length);
                     i++;
@@ -122,6 +129,81 @@ namespace TelemetryTools
                 }
             }
             yield return true;
+        }
+
+
+        public void SaveUserData(KeyID currentKeyID, Dictionary<UserDataKey, string> userData, List<FilePath> userDataFilesList)
+        {
+            if (currentKeyID != null)
+            {
+                if (userData != null)
+                {
+                    if (userData.Count > 0)
+                    {
+                        string[] stringList = new string[userData.Keys.Count];
+                        int i = 0;
+                        foreach (string key in userData.Keys)
+                        {
+                            stringList[i] = key + "," + userData[key];
+                            i++;
+                        }
+
+                        FileInfo file = FileUtility.GetFileInfo(userDataDirectory, currentKeyID.ToString() + "." + userDataFileExtension);
+                        WriteStringsToFile(stringList, file);
+                        userDataFilesList.Remove(file.Name);
+                        userDataFilesList.Add(file.Name);
+                        //TODO: Append rather than rewrite everything
+                        WriteStringsToFile(userDataFilesList.ToArray(), FileUtility.GetFileInfo(userDataDirectory, userDataListFilename));
+                    }
+                    else
+                    {
+                        File.Delete(FileUtility.GetFileInfo(userDataDirectory, currentKeyID.ToString() + "." + userDataFileExtension).FullName);
+                        userDataFilesList.Remove(currentKeyID.ToString() + "." + userDataFileExtension);
+                        WriteStringsToFile(userDataFilesList.ToArray(), FileUtility.GetFileInfo(userDataDirectory, userDataListFilename));
+                    }
+                }
+                else
+                {
+                    File.Delete(FileUtility.GetFileInfo(userDataDirectory, currentKeyID.ToString() + "." + userDataFileExtension).FullName);
+                    userDataFilesList.Remove(currentKeyID.ToString() + "." + userDataFileExtension);
+                    WriteStringsToFile(userDataFilesList.ToArray(), FileUtility.GetFileInfo(userDataDirectory, userDataListFilename));
+                }
+            }
+            else
+                Debug.LogWarning("UserKeyID not valid. You probably have not set a user key.");
+        }
+
+        public List<UniqueKey> GetUserDataFilesList()
+        {
+            return FileUtility.ReadStringsFromFile(FileUtility.GetFileInfo(userDataDirectory, userDataListFilename));
+        }
+
+        public bool WriteUserDataFilesList(List<UniqueKey> userDataFilesList)
+        {
+            return !WriteStringsToFile(userDataFilesList.ToArray(), FileUtility.GetFileInfo(userDataDirectory, userDataListFilename), append: false); ;
+        }
+
+        public static Dictionary<UserDataKey, string> LoadUserData(KeyID keyIDToLoad)
+        {
+            if (keyIDToLoad != null)
+            {
+                List<string> strings = FileUtility.ReadStringsFromFile(FileUtility.GetFileInfo(userDataDirectory, keyIDToLoad.ToString() + "." + userDataFileExtension));
+                Dictionary<UserDataKey, string> userData = new Dictionary<UserDataKey, string>();
+                foreach (string str in strings)
+                {
+                    string[] separators = new string[1];
+                    separators[0] = ",";
+                    string[] keyAndValue = str.Split(separators, 2, System.StringSplitOptions.None);
+                    userData.Add(keyAndValue[0], keyAndValue[1]);
+                }
+                return userData;
+            }
+            return null;
+        }
+
+        public static void DeleteFile(FilePath filePath)
+        {
+            File.Delete(FileUtility.GetFileInfo(FileAccessor.userDataDirectory, filePath).FullName);
         }
 
     }

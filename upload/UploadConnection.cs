@@ -26,7 +26,7 @@ namespace TelemetryTools.Upload
         public bool Busy { get; protected set; }
         public URL URL { get; private set; }
         public bool BadURL { get; private set; }
-        protected UploadRequest UploadRequest { get; private set; }
+        public UploadRequest UploadRequest { get; private set; }
 
         public delegate void ErrorHandler(UploadRequest uploadRequest, string error);
         public delegate void SuccessHandler(UploadRequest uploadRequest, string message = null);
@@ -76,7 +76,7 @@ namespace TelemetryTools.Upload
             UploadRequest = null;
         }
 
-        public void Send(UploadRequest uploadRequest)
+        protected void Send(UploadRequest uploadRequest)
         {
             UploadRequest = uploadRequest;
             Busy = true;

@@ -11,11 +11,9 @@ using FrameID = System.UInt32;
 using UserDataKey = System.String;
 using UniqueKey = System.String;
 
-using UnityEngine;
-
-namespace TelemetryTools.Upload
+namespace TelemetryTools
 {
-    public class BufferUploadRequest : UploadRequest
+    public class KeyAssociatedData
     {
         private readonly byte[] data;
         public byte[] Data { get { return data; } }
@@ -26,24 +24,16 @@ namespace TelemetryTools.Upload
         private readonly SequenceID sequenceID;
         public SequenceID SequenceID { get { return sequenceID; } }
 
-        public BufferUploadRequest(WWW www, UniqueKey key, KeyID keyID, byte[] data, SessionID sessionID, SequenceID sequenceID) : base(www, key, keyID)
-        {
-            byte[] dataCopy = new byte[data.Length];
-            System.Buffer.BlockCopy(data, 0, dataCopy, 0, data.Length);
+        private readonly KeyID keyID;
+        public KeyID KeyID { get { return keyID; } }
 
-            this.data = dataCopy;
+        public KeyAssociatedData(byte[] data, SessionID sessionID, SequenceID sequenceID, KeyID keyID)
+        {
+            this.data = data;
             this.sessionID = sessionID;
             this.sequenceID = sequenceID;
+            this.keyID = keyID;
         }
 
-        public override Bytes RequestSizeInBytes()
-        {
-            return (uint) Data.Length;
-        }
-
-        public KeyAssociatedData GetKeyAssociatedData()
-        {
-            return new KeyAssociatedData(Data, SessionID, SequenceID, KeyID);
-        }
     }
 }

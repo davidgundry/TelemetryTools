@@ -36,7 +36,7 @@ namespace TelemetryTools
 {
     public class Telemetry
     {
-        private Buffer buffer;
+        private Buffer Buffer { get; set; }
         public KeyManager KeyManager { get; private set; }
 
         private Milliseconds startTime = 0;
@@ -51,10 +51,9 @@ namespace TelemetryTools
         private const FilePath cacheListFilename = "cache.txt";
         private List<FilePath> cachedFilesList;
         private bool cachedFilesListDirty;
-        private FileAccessor fileAccessor;
-        public FileAccessor FileAccessor { get { return fileAccessor; } set { fileAccessor = value; } }
+        public FileAccessor FileAccessor { get; set; }
 #else
-        public object fileAccessor;
+        public object FileAccessor;
 #endif
 
 #if POSTENABLED 
@@ -66,9 +65,7 @@ namespace TelemetryTools
         private Dictionary<UserDataKey,string> userData;
         public Dictionary<UserDataKey, string> UserData { get { return userData; } set { userData = value; } }
 #if LOCALSAVEENABLED
-        private const FilePath userDataDirectory = "userdata";
-        private const FilePath userDataFileExtension = "userdata";
-        private const FilePath userDataListFilename = "userdata.txt";
+
         private List<FilePath> userDataFilesList;
         public List<FilePath> UserDataFilesList { get { return userDataFilesList; } }
         public int UserDataFiles { get { if (userDataFilesList != null) return userDataFilesList.Count; return 0; } }
@@ -88,15 +85,21 @@ namespace TelemetryTools
             }
         }
 
+#if LOCALSAVEENABLED
+        public Telemetry(FileAccessor fileAccessor, URL uploadURL = "", URL keyServer = "", URL userDataURL = "")
+        {
+            FileAccessor = fileAccessor;
+#else
         public Telemetry(URL uploadURL = "", URL keyServer = "", URL userDataURL = "")
         {
-            buffer = new Buffer();
+#endif
+            Buffer = new Buffer();
             KeyManager = new KeyManager(this, keyServer);
             sessionID = LoadSessionIDFromPlayerPrefs();
 
 #if LOCALSAVEENABLED
-            cachedFilesList = ReadStringsFromFile(GetFileInfo(cacheDirectory, cacheListFilename));
-            userDataFilesList = ReadStringsFromFile(GetFileInfo(userDataDirectory, userDataListFilename));
+            cachedFilesList = FileUtility.ReadStringsFromFile(FileUtility.GetFileInfo(cacheDirectory, cacheListFilename));
+            userDataFilesList = FileAccessor.GetUserDataFilesList();
             Debug.Log("Persistant Data Path: " + Application.persistentDataPath);
 #endif
 
@@ -118,64 +121,66 @@ namespace TelemetryTools
 
         public void Update(float deltaTime)
         {
-            if (buffer.OffBufferFull)
-                if (DataConnection.ReadyToSend)
-                    buffer.OffBufferFull = !SendBuffer(Utility.RemoveTrailingNulls(buffer.OffBuffer));
-#if POSTENABLED
             UserDataConnection.Update(deltaTime);
             DataConnection.Update(deltaTime);
             KeyManager.Update(deltaTime);
+            ConnectionLogger.Instance.Update();
+
+            if ((Buffer.FullBufferReadyToSend) && (DataConnection.ReadyToSend))
+                SendFullBuffer();
 
             if (HTTPPostEnabled)
             {
 #if LOCALSAVEENABLED
-                if ((!userDatawwwBusy) && (ConnectionLogger.Instance.UploadUserDataDelay <= 0))
-                    if (!UploadBacklogOfUserData())
-                        ConnectionLogger.Instance.UploadUserDataDelay = uploadUserDataDelayOnFailure;
-                if ((!offBufferFull) && (!wwwBusy) && (ConnectionLogger.Instance.UploadCacheFilesDelay <= 0))
-                    if (!UploadBacklogOfCacheFiles())
-                        ConnectionLogger.Instance.UploadCacheFilesDelay = uploadCachedFilesDelayOnFailure;
-#endif
+                if ((UserDataConnection.ReadyToSend))
+                    UploadBacklogOfCachedUserData();
 
-                if ((!buffer.OffBufferFull) && (DataConnection.ReadyToSend))
-                    if (buffer.ReadyToSend)
-                        if (SendBuffer(buffer.GetDataInActiveBuffer(), httpOnly: true))
-                            buffer.ResetBufferPosition();
-            }
+                if ((!Buffer.FullBufferReadyToSend) && (DataConnection.ReadyToSend))
+                    UploadBacklogOfCacheFiles();
 #endif
+                if ((!Buffer.FullBufferReadyToSend) && (DataConnection.ReadyToSend) && (Buffer.PartialBufferReadyToSend))
+                    SendPartialBuffer();
+            }
 #if LOCALSAVEENABLED
             if (userDataFilesListDirty)
-            {
-                userDataFilesListDirty = !fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename),append: false); ;
-            }
+                SaveUserDataFilesList();
+
             if (cachedFilesListDirty)
-            {
-                cachedFilesListDirty = !fileAccessor.WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename), append: false); ;
-            }
+                SaveCachedFilesList();
 #endif
-            ConnectionLogger.Instance.Update();
+            
+        }
+
+        private void SaveUserDataFilesList()
+        {
+            userDataFilesListDirty = !FileAccessor.WriteUserDataFilesList(userDataFilesList);
+        }
+
+        private void SaveCachedFilesList()
+        {
+            cachedFilesListDirty = !FileAccessor.WriteStringsToFile(cachedFilesList.ToArray(), FileUtility.GetFileInfo(cacheDirectory, cacheListFilename), append: false); ;
         }
 
         public void WriteEverything()
         {
 #if LOCALSAVEENABLED
-            SaveUserData(KeyManager.CurrentKeyID, userData, userDataFilesList, fileAccessor);
+            SaveUserData();
 #endif
 
             SendFrame();
-            byte[] dataInBuffer = buffer.GetDataInActiveBuffer();
+            byte[] dataInBuffer = Buffer.GetDataInActiveBuffer();
             bool savedBuffer = false;
 
 #if LOCALSAVEENABLED
             if (KeyManager.CurrentKeyID != null)
             {
                 if (dataInBuffer.Length > 0)
-                    WriteCacheFile(dataInBuffer, sessionID, sequenceID, KeyManager.CurrentKeyID);
+                    WriteCacheFile(new KeyAssociatedData(dataInBuffer, sessionID, sequenceID, KeyManager.CurrentKeyID));
                 savedBuffer = true;
             }
 #endif
 
-            buffer.ResetBufferPosition();
+            Buffer.ResetBufferPosition();
             sequenceID++;
 
 #if POSTENABLED
@@ -183,8 +188,8 @@ namespace TelemetryTools
             if (DataConnection.ConnectionActive)
             {
     #if LOCALSAVEENABLED
-                if (!www.isDone)
-                    WriteCacheFile(wwwData, wwwSessionID, wwwSequenceID, wwwKeyID);
+                if (DataConnection.ConnectionActive)
+                    WriteCacheFile(((BufferUploadRequest) DataConnection.UploadRequest).GetKeyAssociatedData());
     #endif
                 DataConnection.DisposeRequest();
             }
@@ -202,17 +207,14 @@ namespace TelemetryTools
 #endif
 
             if (!savedBuffer)
-            {
                 Debug.LogWarning(dataInBuffer.Length + " bytes lost on close: " + Utility.BytesToString(dataInBuffer));
-            }
         }
 
 
         public bool AllDataUploaded()
         {
-            return false;
+            throw new System.NotImplementedException();
         }
-
 
         public void UpdateUserData(UserDataKey key, string value)
         {
@@ -235,7 +237,7 @@ namespace TelemetryTools
                     UserDataConnection.SendUserData(userData, KeyManager.GetKeyByID(key), key);
 #if LOCALSAVEENABLED
                 else
-                    userDataConnection.SendUserDataByHTTPPost(LoadUserData(key), KeyManager.GetKeyByID(key), key);
+                    UserDataConnection.SendUserData(FileAccessor.LoadUserData(key), KeyManager.GetKeyByID(key), key);
 #endif
                 return true;
             }
@@ -245,35 +247,40 @@ namespace TelemetryTools
                 return false;
             }
         }
+
 #if LOCALSAVEENABLED
-        public bool UploadBacklogOfCachedUserData()
+        public void UploadBacklogOfCachedUserData()
         {
             if (userDataFilesList.Count > 0)
             {
-                int i = 0;
+                int lineNumber = 0;
                 if (UserDataConnection.ReadyToSend)
                 {
-                    string[] separators = new string[1];
-                    separators[0] = ".";
-                    string[] strs = userDataFilesList[i].Split(separators, 2, System.StringSplitOptions.None);
-                    uint result = 0;
-                    if (UInt32.TryParse(strs[0], out result))
-                        UploadUserData(result);
+                    KeyID key = UserDataFileName(lineNumber);
+                    if (key != null)
+                        UploadUserData(key);
                     else
                     {
-                        userDataFilesList.RemoveAt(i);
-                        //fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
+                        userDataFilesList.RemoveAt(lineNumber);
                         userDataFilesListDirty = true;
                     }
-
                 }
             }
-            return UserDataConnection.Busy; // If www is busy, we successfully found something to upload
         }
-#endif
 
-#if LOCALSAVEENABLED
-        private bool UploadBacklogOfCacheFiles()
+
+        private KeyID UserDataFileName(int lineNumber)
+        {
+            string[] separators = new string[1];
+            separators[0] = ".";
+            string[] strs = userDataFilesList[lineNumber].Split(separators, 2, System.StringSplitOptions.None);
+            uint result = 0;
+            if (UInt32.TryParse(strs[0], out result))
+                return result;
+            return null;
+        }
+
+        private void UploadBacklogOfCacheFiles()
         {
             if (cachedFilesList.Count > 0)
             {
@@ -282,19 +289,18 @@ namespace TelemetryTools
                 SequenceID sqID;
                 KeyID keyID;
                 int i = 0;
-                if (!wwwBusy)
+                if (DataConnection.ReadyToSend)
                 {
-                    ParseCacheFileName(cacheDirectory, cachedFilesList[i], out snID, out sqID, out keyID);
+                    FileUtility.ParseCacheFileName(cacheDirectory, cachedFilesList[i], out snID, out sqID, out keyID);
                     if (KeyManager.KeyIsValid(keyID))
                     {
-                        if (LoadFromCacheFile(cacheDirectory, cachedFilesList[i], out data))
+                        if (FileUtility.LoadFromCacheFile(cacheDirectory, cachedFilesList[i], out data))
                         {
                             if ((data.Length > 0) && (snID != null) && (sqID != null) && (keyID != null)) // key here could be empty because it was not known when the file was saved
                             {
-                                SendByHTTPPost(data, snID, sqID, fileExtension, KeyManager.GetKeyByID(keyID), keyID, uploadURL, ref www, out wwwData, out wwwSequenceID, out wwwSessionID, out wwwBusy, out wwwKey, out wwwKeyID);
-                                File.Delete(GetFileInfo(cacheDirectory, cachedFilesList[i]).FullName);
+                                DataConnection.UploadData(data, snID, sqID, fileExtension, KeyManager.GetKeyByID(keyID), keyID);
+                                File.Delete(FileUtility.GetFileInfo(cacheDirectory, cachedFilesList[i]).FullName);
                                 cachedFilesList.RemoveAt(i);
-                                //fileAccessor.WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename));
                                 cachedFilesListDirty = true;
                             }
                             else
@@ -311,29 +317,38 @@ namespace TelemetryTools
                                     sb.Append("\n* Key ID is null");
 
                                 Debug.LogWarning(sb.ToString());
-                                return false;
+                                DataConnection.ResetRequestDelay();
                             }
                         }
                         else
                         {
                             Debug.LogWarning("Error loading from cache file for KeyID:  " + (keyID == null ? "null" : keyID.ToString()));
-                            File.Delete(GetFileInfo(cacheDirectory, cachedFilesList[i]).FullName);
+                            File.Delete(FileUtility.GetFileInfo(cacheDirectory, cachedFilesList[i]).FullName);
                             cachedFilesList.RemoveAt(i);
-                            //fileAccessor.WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename));
                             cachedFilesListDirty = true;
-                            return false;
+                            DataConnection.ResetRequestDelay();
                         }
                     }
                     else
                     {
                         Debug.LogWarning("Cannot upload cache file because KeyID " + keyID.ToString() + " has not been retrieved from the key server.");
-                        return false;
+                        DataConnection.ResetRequestDelay();
                     }
                 }
             }
-            return true; // If www is busy, we successfully found something to upload
         }
 #endif
+
+        private void SendFullBuffer()
+        {
+            Buffer.FullBufferReadyToSend = !SendBuffer(Utility.RemoveTrailingNulls(Buffer.OffBuffer));
+        }
+
+        private void SendPartialBuffer()
+        {
+            if (SendBuffer(Buffer.GetDataInActiveBuffer(), httpOnly: true))
+                Buffer.ResetBufferPosition();
+        }
 
         public bool SendBuffer(byte[] data, bool httpOnly = false)
         {
@@ -356,7 +371,7 @@ namespace TelemetryTools
 #if LOCALSAVEENABLED
             if (!httpOnly)
             {
-                if (WriteCacheFile(data, sessionID, sequenceID, KeyManager.CurrentKeyID))
+                if (WriteCacheFile(new KeyAssociatedData(data, sessionID, sequenceID, KeyManager.CurrentKeyID)))
                 {
                     sequenceID++;
                     return true;
@@ -372,87 +387,24 @@ namespace TelemetryTools
 #if LOCALSAVEENABLED
         public void SaveUserData()
         {
-            SaveUserData(KeyManager.CurrentKeyID, userData, userDataFilesList, fileAccessor);
+            FileAccessor.SaveUserData(KeyManager.CurrentKeyID, userData, userDataFilesList);
         }
+
+
 #endif
-
-        #if LOCALSAVEENABLED
-        private static void SaveUserData(KeyID currentKeyID, Dictionary<UserDataKey,string> userData, List<FilePath> userDataFilesList, FileAccessor fileAccessor)
-        {
-            if (currentKeyID != null)
-            {
-                if (userData != null)
-                {
-                    if (userData.Count > 0)
-                    {
-                        string[] stringList = new string[userData.Keys.Count];
-                        int i = 0;
-                        foreach (string key in userData.Keys)
-                        {
-                            stringList[i] = key + "," + userData[key];
-                            i++;
-                        }
-
-                        FileInfo file = GetFileInfo(userDataDirectory, currentKeyID.ToString() + "." + userDataFileExtension);
-                        fileAccessor.WriteStringsToFile(stringList, file);
-                        userDataFilesList.Remove(file.Name);
-                        userDataFilesList.Add(file.Name);
-                        //TODO: Append rather than rewrite everything
-                        fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
-                    }
-                    else
-                    {
-                        File.Delete(GetFileInfo(userDataDirectory, currentKeyID.ToString() + "." + userDataFileExtension).FullName);
-                        userDataFilesList.Remove(currentKeyID.ToString() + "." + userDataFileExtension);
-                        fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
-                    }
-                }
-                else
-                {
-                    File.Delete(GetFileInfo(userDataDirectory, currentKeyID.ToString() + "." + userDataFileExtension).FullName);
-                    userDataFilesList.Remove(currentKeyID.ToString() + "." + userDataFileExtension);
-                    fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
-                }
-            }
-            else
-                Debug.LogWarning("UserKeyID not valid. You probably have not set a user key.");
-        }
-#endif
-            
-        #if LOCALSAVEENABLED
-        public static Dictionary<UserDataKey, string> LoadUserData(KeyID keyIDToLoad)
-        {
-            if (keyIDToLoad != null)
-            {
-                List<string> strings = ReadStringsFromFile(GetFileInfo(userDataDirectory, keyIDToLoad.ToString() + "." + userDataFileExtension));
-                Dictionary<UserDataKey, string> userData = new Dictionary<UserDataKey, string>();
-                foreach (string str in strings)
-                {
-                    string[] separators = new string[1];
-                    separators[0] = ",";
-                    string[] keyAndValue = str.Split(separators, 2, System.StringSplitOptions.None);
-                    userData.Add(keyAndValue[0], keyAndValue[1]);
-                }
-                return userData;
-            }
-            return null;
-        }
-#endif
-
-
 
         public void SendAllBuffered()
         {
             SendFrame();
 
-            if (buffer.OffBufferFull)
+            if (Buffer.FullBufferReadyToSend)
             {
-                bool success = !SendBuffer(Utility.RemoveTrailingNulls(buffer.OffBuffer));
-                buffer.OffBufferFull = success;
+                bool success = !SendBuffer(Utility.RemoveTrailingNulls(Buffer.OffBuffer));
+                Buffer.FullBufferReadyToSend = success;
             }
 
-            SendBuffer(buffer.GetDataInActiveBuffer());
-            buffer.ResetBufferPosition();
+            SendBuffer(Buffer.GetDataInActiveBuffer());
+            Buffer.ResetBufferPosition();
         }
 
         public void Restart()
@@ -464,7 +416,6 @@ namespace TelemetryTools
             SendEvent(Strings.Event.TelemetryStart);
         }
 
-
         private long GetTimeFromStart()
         {
             return (DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond) -startTime;
@@ -475,7 +426,7 @@ namespace TelemetryTools
             if (KeyManager.CurrentKeyIsSet)
             {
                 ConnectionLogger.Instance.AddDataLoggedSinceUpdate((uint)data.Length);
-                buffer.BufferToFrameBuffer(data);
+                Buffer.BufferToFrameBuffer(data);
             }
             else
                 Debug.LogWarning("Cannot buffer data without it being associated with a unique key. Create a new key.");
@@ -487,12 +438,11 @@ namespace TelemetryTools
             {
                 ConnectionLogger.Instance.AddDataLoggedSinceUpdate((uint)data.Length);
                 bool firstFrame = frameID == 0;
-                buffer.BufferInNewFrame(data, firstFrame);
+                Buffer.BufferInNewFrame(data, firstFrame);
             }
             else
                 Debug.LogWarning("Cannot buffer data without it being associated with a unique key. Create a new key.");
         }
-
 
         public void SendFrame()
         {
@@ -559,7 +509,6 @@ namespace TelemetryTools
             sb.Append("\"");
             BufferToFrameBuffer(Utility.StringToBytes(sb.ToString()));
         }
-
 
         public void SendStreamValue(string key, ValueType value)
         {
@@ -723,280 +672,22 @@ namespace TelemetryTools
             BufferToFrameBuffer(output);
         }
 
-
-
 #if LOCALSAVEENABLED
-
-        private static void ParseCacheFileName(FilePath directory, FilePath filename, out SessionID sessionID, out SequenceID sequenceID, out KeyID keyID)
+        private bool WriteCacheFile(KeyAssociatedData keyAssociatedData)
         {
-            sessionID = null;
-            sequenceID = null;
-            keyID = null;
-            directory = LocalFilePath(directory);
-            if (Directory.Exists(directory))
+            if (keyAssociatedData.Data.Length > 0)
             {
-                uint sqID = 0;
-                uint snID = 0;
-                uint kID = 0;
-                string[] separators = new string[1];
-                separators[0] = ".";
-                string[] fileDetails = filename.Split(separators, 4, System.StringSplitOptions.None);
-                bool parsed = UInt32.TryParse(fileDetails[0], out snID) && UInt32.TryParse(fileDetails[1], out sqID) && UInt32.TryParse(fileDetails[2], out kID);
-
-                if (parsed)
+                FileInfo file = FileUtility.GetFileInfo(cacheDirectory, sessionID, sequenceID, keyAssociatedData.KeyID, GetTimeFromStart(), fileExtension);
+                if ((!File.Exists(file.FullName)) || (!FileUtility.IsFileOpen(file)))
                 {
-                    sessionID = snID;
-                    sequenceID = sqID;
-                    keyID = kID;
-                }
-                else
-                    Debug.LogWarning("Failed to parse filename. List of cache files may be corrputed.");
-            }
-        }
-
-        private static bool IsFileLocked(FilePath file)
-        {
-            FileStream stream = null;
-
-            try
-            {
-                File.Open(file,FileMode.Open, FileAccess.Read, FileShare.None);
-            }
-            catch (IOException)
-            {
-                return true;
-            }
-            finally
-            {
-                if (stream != null)
-                    stream.Close();
-            }
-            return false;
-        }
-
-        private static bool LoadFromCacheFile(FilePath directory, FilePath filename, out byte[] data)
-        {
-            data = new byte[0];
-
-            FilePath cacheFile = GetFileInfo(cacheDirectory, filename).FullName;
-
-            if (File.Exists(cacheFile))
-            {
-                if (!IsFileLocked(cacheFile))
-                {
-                    data = File.ReadAllBytes(cacheFile);
-                    return true;
-                }
-            }
-            else
-                Debug.LogWarning("Attempted to load from from non-existant cache file: " + cacheFile);
-
-            return false;
-        }
-
-        private static List<FilePath> ReadStringsFromFile(FileInfo file)
-        {
-            List<FilePath> list = new List<FilePath>();
-
-            if (file.Exists)
-            {
-                FileStream fileStream = null;
-                try
-                {
-                    fileStream = file.Open(FileMode.Open);
-
-                    byte[] bytes = new byte[fileStream.Length];
-                    fileStream.Read(bytes, 0, (int)fileStream.Length);
-                    string s = BytesToString(bytes);
-                    string[] separators = new string[1];
-                    separators[0] = "\n";
-                    string[] lines = s.Split(separators, Int32.MaxValue, StringSplitOptions.RemoveEmptyEntries);
-                    list = new List<FilePath>(lines);
-                    return list;
-                }
-                catch (IOException)
-                {
-                    return list;
-                }
-                finally
-                {
-                    if (fileStream != null)
+                    if (FileAccessor != null)
                     {
-                        fileStream.Close();
-                        fileStream = null;
-                    }
-                }
-            }
-            Debug.LogWarning("Attempted to read strings from non-existant file: " + file.FullName);
-            return list;
-        }
-
-        private static T ReadValueFromFile<T>(FileInfo file)
-        {
-            if (file.Exists)
-            {
-
-                FileStream fileStream = null;
-                try
-                {
-                    fileStream = file.Open(FileMode.Open);
-
-                    byte[] bytes = new byte[fileStream.Length];
-                    fileStream.Read(bytes, 0, (int)fileStream.Length);
-                    string s = BytesToString(bytes);
-
-                    return (T)TypeDescriptor.GetConverter(typeof(T)).ConvertFromString(s);
-                }
-                catch
-                {
-                    return default(T);
-                }
-                finally
-                {
-                    if (fileStream != null)
-                    {
-                        fileStream.Close();
-                        fileStream = null;
-                    }
-                }
-            }
-
-            Debug.LogWarning("Attempted to read value from non-existant file: " + file.FullName);
-
-            return default(T);
-        }
-
-        private static void WriteValueToFile(ValueType value, FileInfo file)
-        {
-            BackgroundWorker bgWorker = new BackgroundWorker();
-
-            bgWorker.DoWork += (o,a) =>
-            {
-                FileStream fileStream = null;
-                try
-                {
-                    fileStream = file.Open(FileMode.Create);
-
-                    byte[] bytes = StringToBytes(value.ToString() + "\n");
-                    fileStream.Write(bytes, 0, bytes.Length);
-                }
-                finally
-                {
-                    if (fileStream != null)
-                    {
-                        fileStream.Close();
-                        fileStream = null;
-                    }
-                }
-            };
-            //new DoWorkEventHandler(BGWorker_WriteValueToFile);
-            bgWorker.RunWorkerAsync();
-        }
-
-        private static bool IsFileOpen(FileInfo file)
-        {
-            if (file != null)
-            {
-                FileStream stream = null;
-
-                try
-                {
-                    stream = file.Open(FileMode.Open, FileAccess.ReadWrite, FileShare.None);
-                }
-                catch (IOException)
-                {
-                    return true;
-                }
-                finally
-                {
-                    if (stream != null)
-                        stream.Close();
-                }
-            }
-            return false;
-        }
-
-        private static FileInfo GetFileInfo(FilePath directory, FilePath filename)
-        {
-            directory = LocalFilePath(directory);
-            if (!Directory.Exists(directory))
-            {
-                Directory.CreateDirectory(directory);
-                Debug.Log("Created directory " + directory);
-            }
-
-            FilePath filePath = LocalFilePath(directory + "/" + filename);
-            return new FileInfo(filePath);
-        }
-
-        private static FileInfo GetFileInfo(FilePath directory,
-                                            SessionID sessionID,
-                                            SequenceID sequenceID,
-                                            KeyID keyID,
-                                            long time,
-                                            FilePath fileExtension)
-        {
-            directory = LocalFilePath(directory);
-            if (!Directory.Exists(directory))
-            {
-                Directory.CreateDirectory(directory);
-                Debug.Log("Created directory " + directory);
-            }
-
-            System.Text.StringBuilder sb = new System.Text.StringBuilder();
-            sb.Append(sessionID);
-            sb.Append(".");
-            sb.Append(sequenceID);
-            sb.Append(".");
-            sb.Append(keyID);
-            sb.Append(".");
-            sb.Append(time);
-            sb.Append(".");
-            sb.Append(fileExtension);
-
-            FilePath filePath = directory + "/" +sb.ToString();
-            return new FileInfo(filePath);
-        }
-
-        private static FilePath LocalFilePath(FilePath filename)
-        {
-           /* if (Application.platform == RuntimePlatform.IPhonePlayer)
-            {
-                FilePath path = Application.dataPath.Substring(0, Application.dataPath.Length - 5);
-                path = path.Substring(0, path.LastIndexOf('/'));
-                return Path.Combine(Path.Combine(path, "Documents"), filename);
-            }
-            else if (Application.platform == RuntimePlatform.Android)
-            {
-                FilePath path = Application.persistentDataPath;
-                path = path.Substring(0, path.LastIndexOf('/'));
-                return Path.Combine(path, filename);
-            }
-            else
-            {*/
-                //TODO: check what's going on here.
-                FilePath path = Application.persistentDataPath + "/";
-                //path = path.Substring(0, path.LastIndexOf('/')+1);
-                //return path + filename;
-                return Path.Combine(path, filename);
-            //}
-        }
-
-        private bool WriteCacheFile(byte[] data, SessionID sessionID, SequenceID sequenceID, KeyID key)
-        {
-            if (data.Length > 0)
-            {
-                FileInfo file = GetFileInfo(cacheDirectory, sessionID, sequenceID, key, GetTimeFromStart(), fileExtension);
-                if ((!File.Exists(file.FullName)) || (!IsFileOpen(file)))
-                {
-                    if (fileAccessor != null)
-                    {
-                        fileAccessor.WriteDataToFile(data, file);
-                        ConnectionLogger.Instance.AddDataSavedToFileSinceUpdate((uint)data.Length);
+                        FileAccessor.WriteDataToFile(keyAssociatedData.Data, file);
+                        ConnectionLogger.Instance.AddDataSavedToFileSinceUpdate((uint)keyAssociatedData.Data.Length);
 
                         cachedFilesList.Add(file.Name);
                         //TODO: Append rather than rewrite everything
-                        fileAccessor.WriteStringsToFile(cachedFilesList.ToArray(), GetFileInfo(cacheDirectory, cacheListFilename));
+                        FileAccessor.WriteStringsToFile(cachedFilesList.ToArray(), FileUtility.GetFileInfo(cacheDirectory, cacheListFilename));
                         cachedFilesListDirty = true;
                         return true;
                     }
@@ -1023,11 +714,9 @@ namespace TelemetryTools
         {
             BufferUploadRequest bufferUploadRequest = (BufferUploadRequest)uploadRequest;
 #if LOCALSAVEENABLED
-            WriteCacheFile(wwwData, wwwSessionID, wwwSequenceID, wwwKeyID);
-            DisposeWWW(ref www, ref wwwData, ref wwwSessionID, ref wwwSequenceID, ref wwwBusy, ref wwwKey, ref wwwKeyID);
-                        
+            WriteCacheFile(((BufferUploadRequest) uploadRequest).GetKeyAssociatedData());                        
 #else
-            ConnectionLogger.Instance.AddLostData((uint)bufferUploadRequest.Data.Length);
+            DataConnection.LostData += (uint)bufferUploadRequest.Data.Length;
             DataConnection.DisposeRequest();
 #endif
 
@@ -1041,13 +730,19 @@ namespace TelemetryTools
             else
             {
 #if LOCALSAVEENABLED
-                File.Delete(GetFileInfo(userDataDirectory, wwwKeyID.ToString() + "." + userDataFileExtension).FullName);
-                userDataFilesList.Remove(wwwKeyID.ToString() + "." + userDataFileExtension);
-                //fileAccessor.WriteStringsToFile(userDataFilesList.ToArray(), GetFileInfo(userDataDirectory, userDataListFilename));
-                userDataFilesListDirty = true;
+                DeleteUserDataFile(uploadRequest.KeyID);
 #endif
             }
         }
+
+#if LOCALSAVEENABLED
+        private void DeleteUserDataFile(KeyID key)
+        {
+            FileAccessor.DeleteFile(key.ToString() + "." + FileAccessor.userDataFileExtension);
+            userDataFilesList.Remove(key.ToString() + "." + FileAccessor.userDataFileExtension);
+            userDataFilesListDirty = true;
+        }
+#endif
 
     }
 }

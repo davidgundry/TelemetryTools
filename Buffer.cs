@@ -31,7 +31,8 @@ namespace TelemetryTools
         public byte[] ActiveBuffer { get { if (buffer1Active) return outboxBuffer1; else return outboxBuffer2; } }
         public byte[] OffBuffer { get { if (buffer1Active) return outboxBuffer2; else return outboxBuffer1; } }
 
-        public bool OffBufferFull { get; set; }
+        public bool FullBufferReadyToSend { get; set; }
+        public bool PartialBufferReadyToSend { get { return bufferPos > minSendingThreshold; } }
 
         private byte[] outboxBuffer1;
         private byte[] outboxBuffer2;
@@ -42,7 +43,7 @@ namespace TelemetryTools
         private byte[] frameBuffer;
         private int frameBufferPos = 0;
 
-        public bool ReadyToSend { get { return bufferPos > minSendingThreshold; } }
+
 
         public Buffer()
         {
@@ -108,7 +109,7 @@ namespace TelemetryTools
 
             if (frameBufferPos + bufferPos > bufferSize)
             {
-                if (OffBufferFull)
+                if (FullBufferReadyToSend)
                 {
                     Debug.LogWarning("Overflow local telemetry buffer, data overwritten");
                     ConnectionLogger.Instance.AddLostData((uint)Utility.RemoveTrailingNulls(OffBuffer).Length);
@@ -117,7 +118,7 @@ namespace TelemetryTools
                 Array.Clear(ActiveBuffer, bufferPos, outboxBuffer1.Length - bufferPos);
 
                 buffer1Active = !buffer1Active;
-                OffBufferFull = true;
+                FullBufferReadyToSend = true;
                 ResetBufferPosition();
             }
 

@@ -48,7 +48,7 @@ namespace TelemetryTools.Behaviour
                 EditorGUILayout.LabelField("Total", Mathf.Round(TelemetryTools.ConnectionLogger.Instance.DataLogged / 1024) + " KB");
                 EditorGUILayout.LabelField("Cached Files", telemetryController.Telemetry.CachedFiles.ToString());
 #if LOCALSAVEENABLED
-            EditorGUILayout.LabelField("User Data Files", telemetryMonitor.Telemetry.UserDataFiles.ToString());
+                EditorGUILayout.LabelField("User Data Files", telemetryController.Telemetry.UserDataFiles.ToString());
 #endif
                 EditorGUILayout.LabelField("Lost Data", Mathf.Round(TelemetryTools.ConnectionLogger.Instance.LostData / 1024) + " KB");
 

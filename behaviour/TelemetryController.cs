@@ -1,12 +1,20 @@
-﻿using UnityEngine;
+﻿#if (!UNITY_WEBPLAYER)
+#define LOCALSAVEENABLED
+#endif
+
+using UnityEngine;
 
 namespace TelemetryTools.Behaviour
 {
+#if LOCALSAVEENABLED
+    [RequireComponent(typeof(FileAccessor))]
+#endif
     public class TelemetryController : MonoBehaviour
     {
         public bool showLogging;
 
         public Telemetry Telemetry { get; set; }
+        public FileAccessor FileAccessor { get; private set; }
 
         void Awake()
         {
@@ -16,6 +24,8 @@ namespace TelemetryTools.Behaviour
             {
                 Destroy(gameObject);
             }
+
+            FileAccessor = GetComponent<FileAccessor>();
         }
 
         void Start()

@@ -18,6 +18,8 @@ namespace TelemetryTools.Upload
 {
     public class BufferUploadConnection : UploadConnection
     {
+        public Bytes LostData { get; set; }
+
         public BufferUploadConnection(URL url) : base(url) { }
 
         public void UploadData(byte[] data, SessionID sessionID, SequenceID sequenceID, FilePath fileExtension, UniqueKey key, KeyID keyID)
@@ -47,5 +49,6 @@ namespace TelemetryTools.Upload
 
             return form;
         }
+
     }
 }
