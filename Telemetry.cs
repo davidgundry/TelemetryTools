@@ -164,36 +164,40 @@ namespace TelemetryTools
             cachedFilesListDirty = !FileAccessor.WriteCacheFilesList(cachedFilesList);
         }
 
+        private void SaveDataInActiveBuffer()
+        {
+            byte[] dataInBuffer = Buffer.GetDataInActiveBuffer();
+            if (dataInBuffer.Length > 0)
+            {
+                bool savedBuffer = false;
+#if LOCALSAVEENABLED
+                WriteCacheFileAndAddToList(new KeyAssociatedData(dataInBuffer, sessionID, sequenceID, KeyManager.CurrentKeyID));
+                savedBuffer = true;
+#endif
+                Buffer.ResetBufferPosition();
+                sequenceID++;
+
+                if (!savedBuffer)
+                    Debug.LogWarning(dataInBuffer.Length + " bytes lost on close: " + Utility.BytesToString(dataInBuffer));
+            }
+        }
+
         public void WriteEverything()
         {
 #if LOCALSAVEENABLED
             SaveUserData();
 #endif
-
             SendFrame();
-            byte[] dataInBuffer = Buffer.GetDataInActiveBuffer();
-            bool savedBuffer = false;
-
-#if LOCALSAVEENABLED
-            if (KeyManager.CurrentKeyID != null)
-            {
-                if (dataInBuffer.Length > 0)
-                    WriteCacheFileAndAddToList(new KeyAssociatedData(dataInBuffer, sessionID, sequenceID, KeyManager.CurrentKeyID));
-                savedBuffer = true;
-            }
-#endif
-
-            Buffer.ResetBufferPosition();
-            sequenceID++;
+            SaveDataInActiveBuffer();
 
 #if POSTENABLED
 
             if (DataConnection.ConnectionActive)
             {
-    #if LOCALSAVEENABLED
+#if LOCALSAVEENABLED
                 if (DataConnection.ConnectionActive)
-                    WriteCacheFileAndAddToList(((BufferUploadRequest) DataConnection.UploadRequest).GetKeyAssociatedData());
-    #endif
+                    WriteCacheFileAndAddToList(((BufferUploadRequest)DataConnection.UploadRequest).GetKeyAssociatedData());
+#endif
                 DataConnection.DisposeRequest();
             }
 
@@ -208,9 +212,6 @@ namespace TelemetryTools
                     }
             }*/
 #endif
-
-            if (!savedBuffer)
-                Debug.LogWarning(dataInBuffer.Length + " bytes lost on close: " + Utility.BytesToString(dataInBuffer));
         }
 
 
