@@ -233,7 +233,6 @@ namespace TelemetryTools
                                             SessionID sessionID,
                                             SequenceID sequenceID,
                                             KeyID keyID,
-                                            long time,
                                             FilePath fileExtension)
         {
             directory = LocalFilePath(directory);
@@ -249,8 +248,6 @@ namespace TelemetryTools
             sb.Append(sequenceID);
             sb.Append(".");
             sb.Append(keyID);
-            sb.Append(".");
-            sb.Append(time);
             sb.Append(".");
             sb.Append(fileExtension);
 

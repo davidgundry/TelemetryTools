@@ -44,7 +44,6 @@ namespace TelemetryTools
         private SequenceID sequenceID = 0;
         private FrameID frameID = 0;
 
-        private const FilePath fileExtension = "telemetry";
 #if LOCALSAVEENABLED
         private List<FilePath> cachedFilesList;
         private bool cachedFilesListDirty;
@@ -63,7 +62,7 @@ namespace TelemetryTools
         public Dictionary<UserDataKey, string> UserData { get { return userData; } set { userData = value; } }
 #if LOCALSAVEENABLED
 
-        public List<FilePath> UserDataFilesList { get { return UserDataFilesList; } private set; }
+        public List<FilePath> UserDataFilesList { get; private set; }
         public int UserDataFilesCount { get { if (UserDataFilesList != null) return UserDataFilesList.Count; return 0; } }
         private bool UserDataFilesListDirty;
 
@@ -123,7 +122,6 @@ namespace TelemetryTools
             DataConnection.Update(deltaTime);
             KeyManager.Update(deltaTime);
             ConnectionLogger.Instance.Update();
-            ReduceCacheFileBacklogDelay(deltaTime);
 
             if ((Buffer.FullBufferReadyToSend) && (DataConnection.ReadyToSend))
                 SendFullBuffer();
@@ -131,6 +129,7 @@ namespace TelemetryTools
             if (HTTPPostEnabled)
             {
 #if LOCALSAVEENABLED
+                ReduceCacheFileBacklogDelay(deltaTime);
                 if ((UserDataConnection.ReadyToSend))
                     UploadBacklogOfCachedUserData();
 
@@ -179,7 +178,7 @@ namespace TelemetryTools
             if (KeyManager.CurrentKeyID != null)
             {
                 if (dataInBuffer.Length > 0)
-                    WriteCacheFile(new KeyAssociatedData(dataInBuffer, sessionID, sequenceID, KeyManager.CurrentKeyID));
+                    WriteCacheFileAndAddToList(new KeyAssociatedData(dataInBuffer, sessionID, sequenceID, KeyManager.CurrentKeyID));
                 savedBuffer = true;
             }
 #endif
@@ -193,7 +192,7 @@ namespace TelemetryTools
             {
     #if LOCALSAVEENABLED
                 if (DataConnection.ConnectionActive)
-                    WriteCacheFile(((BufferUploadRequest) DataConnection.UploadRequest).GetKeyAssociatedData());
+                    WriteCacheFileAndAddToList(((BufferUploadRequest) DataConnection.UploadRequest).GetKeyAssociatedData());
     #endif
                 DataConnection.DisposeRequest();
             }
@@ -296,7 +295,7 @@ namespace TelemetryTools
                     {
                         if (KeyManager.KeyHasBeenFetched(cacheData.KeyID))
                         {
-                            DataConnection.UploadData(cacheData.Data, cacheData.SessionID, cacheData.SequenceID, fileExtension, KeyManager.GetKeyByID(cacheData.KeyID), cacheData.KeyID);
+                            DataConnection.UploadData(cacheData.Data, cacheData.SessionID, cacheData.SequenceID, FileAccessor.fileExtension, KeyManager.GetKeyByID(cacheData.KeyID), cacheData.KeyID);
                             RemoveLocalCopyOfCacheFile(cacheFileLineIndex);
                             success = true;
                         }
@@ -349,7 +348,7 @@ namespace TelemetryTools
                 {
                     if (KeyManager.CurrentKeyIsFetched)
                     {
-                        DataConnection.UploadData(data, sessionID, sequenceID, fileExtension, KeyManager.CurrentKey, KeyManager.CurrentKeyID);
+                        DataConnection.UploadData(data, sessionID, sequenceID, FileAccessor.fileExtension, KeyManager.CurrentKey, KeyManager.CurrentKeyID);
                         sequenceID++;
                         return true;
                     }
@@ -361,7 +360,7 @@ namespace TelemetryTools
 #if LOCALSAVEENABLED
             if (!httpOnly)
             {
-                if (WriteCacheFile(new KeyAssociatedData(data, sessionID, sequenceID, KeyManager.CurrentKeyID)))
+                if (WriteCacheFileAndAddToList(new KeyAssociatedData(data, sessionID, sequenceID, KeyManager.CurrentKeyID)))
                 {
                     sequenceID++;
                     return true;
@@ -379,8 +378,6 @@ namespace TelemetryTools
         {
             FileAccessor.SaveUserData(KeyManager.CurrentKeyID, userData, UserDataFilesList);
         }
-
-
 #endif
 
         public void SendAllBuffered()
@@ -663,39 +660,7 @@ namespace TelemetryTools
         }
 
 #if LOCALSAVEENABLED
-        private bool WriteCacheFile(KeyAssociatedData keyAssociatedData)
-        {
-            if (keyAssociatedData.Data.Length > 0)
-            {
-                FileInfo file = FileUtility.GetFileInfo(cacheDirectory, sessionID, sequenceID, keyAssociatedData.KeyID, GetTimeFromStart(), fileExtension);
-                if ((!File.Exists(file.FullName)) || (!FileUtility.IsFileOpen(file)))
-                {
-                    if (FileAccessor != null)
-                    {
-                        FileAccessor.WriteDataToFile(keyAssociatedData.Data, file);
-                        ConnectionLogger.Instance.AddDataSavedToFileSinceUpdate((uint)keyAssociatedData.Data.Length);
 
-                        cachedFilesList.Add(file.Name);
-                        //TODO: Append rather than rewrite everything
-                        FileAccessor.WriteStringsToFile(cachedFilesList.ToArray(), FileUtility.GetFileInfo(cacheDirectory, cacheListFilename));
-                        cachedFilesListDirty = true;
-                        return true;
-                    }
-                    else
-                    {
-                        Debug.LogWarning("Couldn't write cache file because fileAccessor is null");
-                        return false;
-                    }
-                }
-                else
-                {
-                    Debug.LogWarning("Couldn't write cache file because it was open or it already exists");
-                    return false;
-                }
-            }
-
-            return true;
-        }
 
 #endif
 
@@ -704,12 +669,29 @@ namespace TelemetryTools
         {
             BufferUploadRequest bufferUploadRequest = (BufferUploadRequest)uploadRequest;
 #if LOCALSAVEENABLED
-            WriteCacheFile(((BufferUploadRequest) uploadRequest).GetKeyAssociatedData());                        
+            WriteCacheFileAndAddToList(((BufferUploadRequest) uploadRequest).GetKeyAssociatedData());                        
 #else
             DataConnection.LostData += (uint)bufferUploadRequest.Data.Length;
             DataConnection.DisposeRequest();
 #endif
 
+        }
+
+        private bool WriteCacheFileAndAddToList(KeyAssociatedData cacheFileData)
+        {
+            if (cacheFileData.Data.Length == 0)
+                return true;
+
+            FileInfo file = FileAccessor.WriteCacheFile(cacheFileData);
+            if (file != null)
+            {
+                ConnectionLogger.Instance.AddDataSavedToFileSinceUpdate((uint)cacheFileData.Data.Length);
+                cachedFilesList.Add(file.Name);
+                FileAccessor.WriteCacheFilesList(cachedFilesList);
+                cachedFilesListDirty = true;
+                return true;
+            }
+            return false;
         }
 
         // Used as delegate for UserDataUploadConnection

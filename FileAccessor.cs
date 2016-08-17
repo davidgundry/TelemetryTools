@@ -41,6 +41,7 @@ namespace TelemetryTools
 
         private const FilePath cacheDirectory = "cache";
         private const FilePath cacheListFilename = "cache.txt";
+        public const FilePath fileExtension = "telemetry";
 
         public void WriteDataToFile(byte[] data, FileInfo file, bool append = false)
         {
@@ -173,6 +174,28 @@ namespace TelemetryTools
             }
             else
                 Debug.LogWarning("UserKeyID not valid. You probably have not set a user key.");
+        }
+
+
+        public FileInfo WriteCacheFile(KeyAssociatedData keyAssociatedData)
+        {
+            if (keyAssociatedData.Data.Length > 0)
+            {
+                FileInfo file = FileUtility.GetFileInfo(cacheDirectory, keyAssociatedData.SessionID, keyAssociatedData.SequenceID, keyAssociatedData.KeyID, fileExtension);
+                if ((!File.Exists(file.FullName)) || (!FileUtility.IsFileOpen(file)))
+                {
+                    WriteDataToFile(keyAssociatedData.Data, file);
+
+                    return file;
+                }
+                else
+                {
+                    Debug.LogWarning("Couldn't write cache file because it was open or it already exists");
+                    return null;
+                }
+            }
+
+            return null;
         }
 
         public List<FilePath> GetCacheDataFilesList()
