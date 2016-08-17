@@ -184,7 +184,7 @@ namespace TelemetryTools
             return false;
         }
 
-        public void UpdateUserDataKeyValue(UserDataKey key, string value)
+        public void AddOrUpdateUserDataKeyValue(UserDataKey key, string value)
         {
             if (KeyManager.CurrentKeyID != null)
                 userData[key] = value;
@@ -192,7 +192,7 @@ namespace TelemetryTools
                 Debug.LogWarning("Cannot log user data without a unique key.");
         }
 
-        public void UploadCurrentUserData()
+        public void UploadOrSaveCurrentUserData()
         {
             UploadUserData(KeyManager.CurrentKeyID);
 #if LOCALSAVEENABLED

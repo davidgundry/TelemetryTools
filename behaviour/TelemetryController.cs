@@ -108,7 +108,7 @@ namespace TelemetryTools.Behaviour
         {
             if (Telemetry != null)
             {
-                Telemetry.UpdateUserDataKeyValue(key, value);
+                Telemetry.AddOrUpdateUserDataKeyValue(key, value);
             }
             else
                 throw new TelemetryDoesntExistException();
