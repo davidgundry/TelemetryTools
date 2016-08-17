@@ -108,14 +108,6 @@ namespace TelemetryTools
 #endif
         }
 
-        private SessionID LoadSessionIDFromPlayerPrefs()
-        {
-            SessionID sessionID = (SessionID)PlayerPrefs.GetInt("sessionID");
-            PlayerPrefs.SetInt("sessionID", (int)sessionID + 1);
-            PlayerPrefs.Save();
-            return sessionID;
-        }
-
         public void Update(float deltaTime)
         {
             UserDataConnection.Update(deltaTime);
@@ -148,47 +140,13 @@ namespace TelemetryTools
 #endif
         }
 
-        private void ReduceCacheFileBacklogDelay(float deltaTime)
-        {
-            if (cacheFileBacklogDelay > 0)
-                cacheFileBacklogDelay -= deltaTime;
-        }
-
-        private void SaveUserDataFilesList()
-        {
-            UserDataFilesListDirty = !FileAccessor.WriteUserDataFilesList(UserDataFilesList);
-        }
-
-        private void SaveCachedFilesList()
-        {
-            cachedFilesListDirty = !FileAccessor.WriteCacheFilesList(cachedFilesList);
-        }
-
-        private void SaveDataInActiveBuffer()
-        {
-            byte[] dataInBuffer = Buffer.GetDataInActiveBuffer();
-            if (dataInBuffer.Length > 0)
-            {
-                bool savedBuffer = false;
-#if LOCALSAVEENABLED
-                WriteCacheFileAndAddToList(new KeyAssociatedData(dataInBuffer, sessionID, sequenceID, KeyManager.CurrentKeyID));
-                savedBuffer = true;
-#endif
-                Buffer.ResetBufferPosition();
-                sequenceID++;
-
-                if (!savedBuffer)
-                    Debug.LogWarning(dataInBuffer.Length + " bytes lost on close: " + Utility.BytesToString(dataInBuffer));
-            }
-        }
-
-        public void WriteEverything()
+        public void WriteEverythingOnQuit()
         {
 #if LOCALSAVEENABLED
-            SaveUserData();
+            SaveUserData(KeyManager.CurrentKeyID);
 #endif
             SendFrame();
-            SaveDataInActiveBuffer();
+            WriteDataInActiveBufferToFile();
 
 #if POSTENABLED
 
@@ -214,13 +172,19 @@ namespace TelemetryTools
 #endif
         }
 
-
-        public bool AllDataUploaded()
+        public bool IsAllDataUploaded()
         {
-            throw new System.NotImplementedException();
+            if (!DataConnection.ConnectionActive)
+                if (!UserDataConnection.ConnectionActive)
+                    if (UserData.Count == 0)
+                        if (!KeyManager.KeyConnection.ConnectionActive)
+                            if (!Buffer.FullBufferReadyToSend)
+                                if (Utility.RemoveTrailingNulls(Buffer.GetDataInActiveBuffer()).Length == 0)
+                                    return true;
+            return false;
         }
 
-        public void UpdateUserData(UserDataKey key, string value)
+        public void UpdateUserDataKeyValue(UserDataKey key, string value)
         {
             if (KeyManager.CurrentKeyID != null)
                 userData[key] = value;
@@ -231,155 +195,10 @@ namespace TelemetryTools
         public void UploadCurrentUserData()
         {
             UploadUserData(KeyManager.CurrentKeyID);
-        }
-
-        private bool UploadUserData(KeyID key)
-        {
-            if (KeyManager.CurrentKeyIsFetched)
-            {
-                if (key == KeyManager.CurrentKeyID)
-                    UserDataConnection.SendUserData(userData, KeyManager.GetKeyByID(key), key);
 #if LOCALSAVEENABLED
-                else
-                    UserDataConnection.SendUserData(FileAccessor.LoadUserData(key), KeyManager.GetKeyByID(key), key);
+            SaveUserData(KeyManager.CurrentKeyID);
 #endif
-                return true;
-            }
-            else
-            {
-                Debug.LogWarning("Cannot upload user data of keyID " + key + " because we have not yet fetched that key.");
-                return false;
-            }
         }
-
-#if LOCALSAVEENABLED
-        public void UploadBacklogOfCachedUserData()
-        {
-            if (UserDataFilesList.Count > 0)
-            {
-                int lineNumber = 0;
-                if (UserDataConnection.ReadyToSend)
-                {
-                    KeyID key = UserDataFileName(lineNumber);
-                    if (key != null)
-                        UploadUserData(key);
-                    else
-                    {
-                        UserDataFilesList.RemoveAt(lineNumber);
-                        UserDataFilesListDirty = true;
-                    }
-                }
-            }
-        }
-
-        private KeyID UserDataFileName(int lineNumber)
-        {
-            string[] separators = new string[1];
-            separators[0] = ".";
-            string[] strs = UserDataFilesList[lineNumber].Split(separators, 2, System.StringSplitOptions.None);
-            uint result = 0;
-            if (UInt32.TryParse(strs[0], out result))
-                return result;
-            return null;
-        }
-
-        private void UploadBacklogOfCacheFiles()
-        {
-            bool success = false;
-            if (cachedFilesList.Count > 0)
-            {
-                if (DataConnection.ReadyToSend)
-                {
-                    int cacheFileLineIndex = 0;
-                    KeyAssociatedData cacheData = FileAccessor.LoadDataFromCacheFile(cachedFilesList[cacheFileLineIndex]);
-                    if (cacheData != null)
-                    {
-                        if (KeyManager.KeyHasBeenFetched(cacheData.KeyID))
-                        {
-                            DataConnection.UploadData(cacheData.Data, cacheData.SessionID, cacheData.SequenceID, FileAccessor.fileExtension, KeyManager.GetKeyByID(cacheData.KeyID), cacheData.KeyID);
-                            RemoveLocalCopyOfCacheFile(cacheFileLineIndex);
-                            success = true;
-                        }
-                        else
-                            Debug.LogWarning("Cannot upload cache file because KeyID " + cacheData.KeyID.ToString() + " has not been retrieved from the key server.");
-                    }
-                    else
-                    {
-                        string keyIDString = (cacheData.KeyID == null ? "null" : cacheData.KeyID.ToString());
-                        Debug.LogWarning("Error loading from cache file for KeyID:  " + keyIDString);
-                        RemoveLocalCopyOfCacheFile(cacheFileLineIndex);
-                    }
-                }
-            }
-
-            if (!success)
-                ResetCacheFileBacklogDelay();
-        }
-
-        private void ResetCacheFileBacklogDelay()
-        {
-            cacheFileBacklogDelay = totalCacheFileBacklogDelay;
-        }
-
-        private void RemoveLocalCopyOfCacheFile(int cacheFileLineIndex)
-        {
-            FileAccessor.DeleteCacheFile(cachedFilesList[cacheFileLineIndex]);
-            cachedFilesList.RemoveAt(cacheFileLineIndex);
-            cachedFilesListDirty = true;
-        }
-#endif
-
-        private void SendFullBuffer()
-        {
-            Buffer.FullBufferReadyToSend = !SendBuffer(Utility.RemoveTrailingNulls(Buffer.OffBuffer));
-        }
-
-        private void SendPartialBuffer()
-        {
-            if (SendBuffer(Buffer.GetDataInActiveBuffer(), httpOnly: true))
-                Buffer.ResetBufferPosition();
-        }
-
-        public bool SendBuffer(byte[] data, bool httpOnly = false)
-        {
-#if POSTENABLED
-            if (HTTPPostEnabled)
-            {
-                if (DataConnection.ReadyToSend)
-                {
-                    if (KeyManager.CurrentKeyIsFetched)
-                    {
-                        DataConnection.UploadData(data, sessionID, sequenceID, FileAccessor.fileExtension, KeyManager.CurrentKey, KeyManager.CurrentKeyID);
-                        sequenceID++;
-                        return true;
-                    }
-                }
-                else
-                    Debug.LogWarning("Cannot send buffer: WWW object busy");
-            }
-#endif
-#if LOCALSAVEENABLED
-            if (!httpOnly)
-            {
-                if (WriteCacheFileAndAddToList(new KeyAssociatedData(data, sessionID, sequenceID, KeyManager.CurrentKeyID)))
-                {
-                    sequenceID++;
-                    return true;
-                }
-            }
-            if (!httpOnly)
-#endif
-            Debug.LogWarning("Could not deal with buffer: " + Utility.BytesToString(data));
-
-            return false;
-        }
-
-#if LOCALSAVEENABLED
-        public void SaveUserData()
-        {
-            FileAccessor.SaveUserData(KeyManager.CurrentKeyID, userData, UserDataFilesList);
-        }
-#endif
 
         public void SendAllBuffered()
         {
@@ -402,34 +221,6 @@ namespace TelemetryTools
             startTime = (DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond);
             SendKeyValuePair(Strings.Event.TelemetryStart, System.DateTime.UtcNow.ToString("u"));
             SendEvent(Strings.Event.TelemetryStart);
-        }
-
-        private long GetTimeFromStart()
-        {
-            return (DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond) -startTime;
-        }
-
-        private void BufferToFrameBuffer(byte[] data)
-        {
-            if (KeyManager.CurrentKeyIsSet)
-            {
-                ConnectionLogger.Instance.AddDataLoggedSinceUpdate((uint)data.Length);
-                Buffer.BufferToFrameBuffer(data);
-            }
-            else
-                Debug.LogWarning("Cannot buffer data without it being associated with a unique key. Create a new key.");
-        }
-
-        private void BufferInNewFrame(byte[] data)
-        {
-            if (KeyManager.CurrentKeyIsSet)
-            {
-                ConnectionLogger.Instance.AddDataLoggedSinceUpdate((uint)data.Length);
-                bool firstFrame = frameID == 0;
-                Buffer.BufferInNewFrame(data, firstFrame);
-            }
-            else
-                Debug.LogWarning("Cannot buffer data without it being associated with a unique key. Create a new key.");
         }
 
         public void SendFrame()
@@ -661,9 +452,158 @@ namespace TelemetryTools
         }
 
 #if LOCALSAVEENABLED
+        private void SaveUserData(KeyID keyID)
+        {
+            FileAccessor.SaveUserData(keyID, userData, UserDataFilesList);
+        }
 
+        private void UploadBacklogOfCachedUserData()
+        {
+            if (UserDataFilesList.Count > 0)
+            {
+                int lineNumber = 0;
+                if (UserDataConnection.ReadyToSend)
+                {
+                    KeyID key = UserDataFileName(lineNumber);
+                    if (key != null)
+                        UploadUserData(key);
+                    else
+                    {
+                        UserDataFilesList.RemoveAt(lineNumber);
+                        UserDataFilesListDirty = true;
+                    }
+                }
+            }
+        }
 
+        private KeyID UserDataFileName(int lineNumber)
+        {
+            string[] separators = new string[1];
+            separators[0] = ".";
+            string[] strs = UserDataFilesList[lineNumber].Split(separators, 2, System.StringSplitOptions.None);
+            uint result = 0;
+            if (UInt32.TryParse(strs[0], out result))
+                return result;
+            return null;
+        }
+
+        private void UploadBacklogOfCacheFiles()
+        {
+            bool success = false;
+            if (cachedFilesList.Count > 0)
+            {
+                if (DataConnection.ReadyToSend)
+                {
+                    int cacheFileLineIndex = 0;
+                    KeyAssociatedData cacheData = FileAccessor.LoadDataFromCacheFile(cachedFilesList[cacheFileLineIndex]);
+                    if (cacheData != null)
+                    {
+                        if (KeyManager.KeyHasBeenFetched(cacheData.KeyID))
+                        {
+                            DataConnection.UploadData(cacheData.Data, cacheData.SessionID, cacheData.SequenceID, FileAccessor.fileExtension, KeyManager.GetKeyByID(cacheData.KeyID), cacheData.KeyID);
+                            RemoveLocalCopyOfCacheFile(cacheFileLineIndex);
+                            success = true;
+                        }
+                        else
+                            Debug.LogWarning("Cannot upload cache file because KeyID " + cacheData.KeyID.ToString() + " has not been retrieved from the key server.");
+                    }
+                    else
+                    {
+                        string keyIDString = (cacheData.KeyID == null ? "null" : cacheData.KeyID.ToString());
+                        Debug.LogWarning("Error loading from cache file for KeyID:  " + keyIDString);
+                        RemoveLocalCopyOfCacheFile(cacheFileLineIndex);
+                    }
+                }
+            }
+
+            if (!success)
+                ResetCacheFileBacklogDelay();
+        }
+
+        private void ResetCacheFileBacklogDelay()
+        {
+            cacheFileBacklogDelay = totalCacheFileBacklogDelay;
+        }
+
+        private void RemoveLocalCopyOfCacheFile(int cacheFileLineIndex)
+        {
+            FileAccessor.DeleteCacheFile(cachedFilesList[cacheFileLineIndex]);
+            cachedFilesList.RemoveAt(cacheFileLineIndex);
+            cachedFilesListDirty = true;
+        }
 #endif
+        private void SendFullBuffer()
+        {
+            Buffer.FullBufferReadyToSend = !SendBuffer(Utility.RemoveTrailingNulls(Buffer.OffBuffer));
+        }
+
+        private void SendPartialBuffer()
+        {
+            if (SendBuffer(Buffer.GetDataInActiveBuffer(), httpOnly: true))
+                Buffer.ResetBufferPosition();
+        }
+
+        private bool SendBuffer(byte[] data, bool httpOnly = false)
+        {
+#if POSTENABLED
+            if (HTTPPostEnabled)
+            {
+                if (DataConnection.ReadyToSend)
+                {
+                    if (KeyManager.CurrentKeyIsFetched)
+                    {
+                        DataConnection.UploadData(data, sessionID, sequenceID, FileAccessor.fileExtension, KeyManager.CurrentKey, KeyManager.CurrentKeyID);
+                        sequenceID++;
+                        return true;
+                    }
+                }
+                else
+                    Debug.LogWarning("Cannot send buffer: WWW object busy");
+            }
+#endif
+#if LOCALSAVEENABLED
+            if (!httpOnly)
+            {
+                if (WriteCacheFileAndAddToList(new KeyAssociatedData(data, sessionID, sequenceID, KeyManager.CurrentKeyID)))
+                {
+                    sequenceID++;
+                    return true;
+                }
+            }
+            if (!httpOnly)
+#endif
+                Debug.LogWarning("Could not deal with buffer: " + Utility.BytesToString(data));
+
+            return false;
+        }
+
+        private long GetTimeFromStart()
+        {
+            return (DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond) - startTime;
+        }
+
+        private void BufferToFrameBuffer(byte[] data)
+        {
+            if (KeyManager.CurrentKeyIsSet)
+            {
+                ConnectionLogger.Instance.AddDataLoggedSinceUpdate((uint)data.Length);
+                Buffer.BufferToFrameBuffer(data);
+            }
+            else
+                Debug.LogWarning("Cannot buffer data without it being associated with a unique key. Create a new key.");
+        }
+
+        private void BufferInNewFrame(byte[] data)
+        {
+            if (KeyManager.CurrentKeyIsSet)
+            {
+                ConnectionLogger.Instance.AddDataLoggedSinceUpdate((uint)data.Length);
+                bool firstFrame = frameID == 0;
+                Buffer.BufferInNewFrame(data, firstFrame);
+            }
+            else
+                Debug.LogWarning("Cannot buffer data without it being associated with a unique key. Create a new key.");
+        }
 
         // Used as delegate for BufferUploadConnection
         private void SaveDataOnBufferUploadErrorIfWeCan(UploadRequest uploadRequest,string error)
@@ -717,5 +657,68 @@ namespace TelemetryTools
         }
 #endif
 
+        private void ReduceCacheFileBacklogDelay(float deltaTime)
+        {
+            if (cacheFileBacklogDelay > 0)
+                cacheFileBacklogDelay -= deltaTime;
+        }
+
+        private void SaveUserDataFilesList()
+        {
+            UserDataFilesListDirty = !FileAccessor.WriteUserDataFilesList(UserDataFilesList);
+        }
+
+        private void SaveCachedFilesList()
+        {
+            cachedFilesListDirty = !FileAccessor.WriteCacheFilesList(cachedFilesList);
+        }
+
+        private void WriteDataInActiveBufferToFile()
+        {
+            byte[] dataInBuffer = Buffer.GetDataInActiveBuffer();
+            if (dataInBuffer.Length > 0)
+            {
+                bool savedBuffer = false;
+#if LOCALSAVEENABLED
+                WriteCacheFileAndAddToList(new KeyAssociatedData(dataInBuffer, sessionID, sequenceID, KeyManager.CurrentKeyID));
+                savedBuffer = true;
+#endif
+
+                if (savedBuffer)
+                {
+                    Buffer.ResetBufferPosition();
+                    sequenceID++;
+                }
+                else
+                    Debug.LogWarning(dataInBuffer.Length + " bytes lost on close: " + Utility.BytesToString(dataInBuffer));
+            }
+        }
+
+        private SessionID LoadSessionIDFromPlayerPrefs()
+        {
+            SessionID sessionID = (SessionID)PlayerPrefs.GetInt("sessionID");
+            PlayerPrefs.SetInt("sessionID", (int)sessionID + 1);
+            PlayerPrefs.Save();
+            return sessionID;
+        }
+
+        private bool UploadUserData(KeyID key)
+        {
+            if (KeyManager.CurrentKeyIsFetched)
+            {
+                if (key == KeyManager.CurrentKeyID)
+                    UserDataConnection.SendUserData(userData, KeyManager.GetKeyByID(key), key);
+#if LOCALSAVEENABLED
+                else
+                    UserDataConnection.SendUserData(FileAccessor.LoadUserData(key), KeyManager.GetKeyByID(key), key);
+#endif
+                return true;
+            }
+            else
+            {
+                Debug.LogWarning("Cannot upload user data of keyID " + key + " because we have not yet fetched that key.");
+                return false;
+            }
+        }
     }
 }

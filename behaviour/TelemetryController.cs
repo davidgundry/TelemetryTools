@@ -98,7 +98,7 @@ namespace TelemetryTools.Behaviour
         {
             if (Telemetry != null)
             {
-                Telemetry.WriteEverything();
+                Telemetry.WriteEverythingOnQuit();
             }
             else
                 throw new TelemetryDoesntExistException();
@@ -108,7 +108,7 @@ namespace TelemetryTools.Behaviour
         {
             if (Telemetry != null)
             {
-                Telemetry.UpdateUserData(key, value);
+                Telemetry.UpdateUserDataKeyValue(key, value);
             }
             else
                 throw new TelemetryDoesntExistException();
@@ -140,7 +140,7 @@ namespace TelemetryTools.Behaviour
         {
             if (Telemetry != null)
             {
-                Telemetry.WriteEverything();
+                Telemetry.WriteEverythingOnQuit();
                 Telemetry.SendEvent(Strings.Event.ApplicationQuit);
             }
         }
