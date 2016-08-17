@@ -77,7 +77,7 @@ namespace TelemetryTools
             return Keys[(uint)id];
         }
 
-        public bool KeyIsValid(KeyID id)
+        public bool KeyHasBeenFetched(KeyID id)
         {
             return id < NumberOfKeys;
         }
