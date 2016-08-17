@@ -1,4 +1,4 @@
-﻿namespace TelemetryTools
+﻿namespace TelemetryTools.Strings
 {
     /// <summary>
     /// This class contains pre-defined keys for the user properties sumbitted with a key request.

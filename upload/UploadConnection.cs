@@ -25,22 +25,23 @@ namespace TelemetryTools.Upload
     {
         public bool Busy { get; protected set; }
         public URL URL { get; private set; }
+        public bool BadURL { get; private set; }
         protected UploadRequest UploadRequest { get; private set; }
 
         public delegate void ErrorHandler(UploadRequest uploadRequest, string error);
         public delegate void SuccessHandler(UploadRequest uploadRequest, string message = null);
 
-        public event ErrorHandler OnError;
-        public event SuccessHandler OnSuccess;
+        public event ErrorHandler OnError = delegate { };
+        public event SuccessHandler OnSuccess = delegate { };
 
-        public bool NoRequestDelay { get { return RequestDelay <= 0; } }
+        public bool ReadyToSend { get { return ((RequestDelay <= 0) && (!BadURL) && (!Busy)); } }
         protected float RequestDelay { get; set; }
         protected float TotalRequestDelay { get; set; }
         private const float defaultTotalRequestDelay = 1;
 
-        protected int Requests { get; set; }
-        protected int Errors { get; private set; }
-        protected int Successes { get; private set; }
+        public int Requests { get; protected set; }
+        public int Errors { get; private set; }
+        public int Successes { get; private set; }
         public int InvalidResponse { get; set; }
         protected Bytes BytesSent { get; private set; }
 
@@ -53,14 +54,22 @@ namespace TelemetryTools.Upload
         public void SetURL(URL url)
         {
             URL = url;
+            BadURL = false;
         }
 
-        public bool Initialised()
+        public bool ConnectionActive
         {
-            return UploadRequest.WWW != null;
+            get
+            {
+                if (UploadRequest == null)
+                    return false;
+                if (UploadRequest.WWW == null)
+                    return false;
+                return true;
+            }
         }
 
-        public virtual void Dispose()
+        public virtual void DisposeRequest()
         {
             Busy = false;
             UploadRequest.Dispose();
@@ -93,8 +102,7 @@ namespace TelemetryTools.Upload
 
         private void CheckForWWWResponse()
         {
-            if (UploadRequest.WWW != null)
-            {
+            if (ConnectionActive)
                 if ((UploadRequest.WWW.isDone) && (!string.IsNullOrEmpty(UploadRequest.WWW.error)))
                 {
                     Error();
@@ -103,27 +111,40 @@ namespace TelemetryTools.Upload
                 {
                     Success();
                 }
-            }
         }
 
         private void Success()
         {
             Successes++;
-            if (!string.IsNullOrEmpty(UploadRequest.WWW.text.Trim()))
+            string message = UploadRequest.WWW.text;
+            if (!string.IsNullOrEmpty(message.Trim()))
             {
-                Debug.LogWarning("Response from server: " + UploadRequest.WWW.text);
-                OnSuccess.Invoke(UploadRequest, UploadRequest.WWW.text);
+                Debug.LogWarning("Response from server: " + message);
+                OnSuccess.Invoke(UploadRequest, message);
             }
             else
-                OnSuccess.Invoke(UploadRequest);     
+                OnSuccess.Invoke(UploadRequest);
+
+            DisposeRequest();
         }
 
         private void Error()
         {
             Errors++;
-            Debug.LogWarning("WWW Error: " + UploadRequest.WWW.error);
-            OnError.Invoke(UploadRequest, UploadRequest.WWW.error);
+
+            string error = UploadRequest.WWW.error;
+
+            if (error == "<url> malformed")
+            {
+                BadURL = true;
+                Debug.LogWarning("WWW Error: " + error + ". Will not retry until URL is changed");
+            }
+            else
+                Debug.LogWarning("WWW Error: " + error);
+
+            OnError.Invoke(UploadRequest, error);
             ResetRequestDelay();
+            DisposeRequest();
         }
 
         private void ReduceRequestDelay(float deltaTime)

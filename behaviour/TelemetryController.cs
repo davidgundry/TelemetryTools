@@ -120,9 +120,9 @@ namespace TelemetryTools.Behaviour
             if (Telemetry != null)
             {
                 if (pauseStatus)
-                    Telemetry.SendEvent(TelemetryTools.Event.ApplicationUnpause);
+                    Telemetry.SendEvent(Strings.Event.ApplicationUnpause);
                 else
-                    Telemetry.SendEvent(TelemetryTools.Event.ApplicationPause);
+                    Telemetry.SendEvent(Strings.Event.ApplicationPause);
             }
         }
 
@@ -131,7 +131,7 @@ namespace TelemetryTools.Behaviour
             if (Telemetry != null)
             {
                 Telemetry.WriteEverything();
-                Telemetry.SendEvent(TelemetryTools.Event.ApplicationQuit);
+                Telemetry.SendEvent(Strings.Event.ApplicationQuit);
             }
         }
 

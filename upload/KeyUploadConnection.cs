@@ -2,14 +2,23 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+using TelemetryTools.Strings;
+
 using URL = System.String;
 using KeyID = System.Nullable<System.UInt32>;
+using UniqueKey = System.String;
 
 namespace TelemetryTools.Upload
 {
     public class KeyUploadConnection : UploadConnection
     {
-        public KeyUploadConnection(URL url) : base(url) { }
+        public delegate void KeyReturnedHandler(UniqueKey keyReturned);
+        public event KeyReturnedHandler OnKeyReturned = delegate (UniqueKey keyReturned) {};
+
+        public KeyUploadConnection(URL url) : base(url)
+        {
+            OnSuccess += new SuccessHandler(HandleServerResponse);
+        }
 
         public void RequestUniqueKey(KeyValuePair<string, string>[] userData, KeyID keyID)
         {
@@ -24,6 +33,35 @@ namespace TelemetryTools.Upload
             foreach (KeyValuePair<string, string> pair in userData)
                 form.AddField(pair.Key, pair.Value);
             return form;
+        }
+
+        private void HandleServerResponse(UploadRequest uploadRequest, string message)
+        {
+            UniqueKey newKey = GetReturnedKey(message);
+            if (newKey != null)
+            {
+                OnKeyReturned.Invoke(newKey);
+            }
+            else
+            {
+                InvalidResponse++;
+                ResetRequestDelay();
+            }
+        }
+
+        private UniqueKey GetReturnedKey(string message)
+        {
+            if (message.StartsWith("key:"))
+            {
+                UniqueKey uniqueKey = message.Substring(4);
+                Debug.Log("Key retrieved: " + uniqueKey);
+                return uniqueKey;
+            }
+            else
+            {
+                Debug.LogWarning("Invalid key retrieved: " + message);
+                return null;
+            }
         }
     }
 }

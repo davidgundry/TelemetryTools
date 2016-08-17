@@ -18,6 +18,7 @@ using UniqueKey = System.String;
 using System.Collections.Generic;
 
 using TelemetryTools.Upload;
+using TelemetryTools.Strings;
 
 namespace TelemetryTools
 {
@@ -44,7 +45,7 @@ namespace TelemetryTools
 
 #if POSTENABLED
             KeyConnection = new KeyUploadConnection(keyServer);
-            KeyConnection.OnSuccess += new UploadConnection.SuccessHandler(HandleKeySuccess);
+            KeyConnection.OnKeyReturned += new KeyUploadConnection.KeyReturnedHandler(HandleKeyReturned);
             LoadKeysFromPlayerPrefs();
 #endif
         }
@@ -132,9 +133,8 @@ namespace TelemetryTools
         private void CheckForAndFetchNewKeys()
         {
             if (NumberOfUsedKeys > NumberOfKeys)
-                if (KeyConnection.NoRequestDelay)
-                    if (!KeyConnection.Busy)
-                        RequestKey();
+                if (KeyConnection.ReadyToSend)
+                    RequestKey();
         }
 
         private void RequestKey()
@@ -161,33 +161,9 @@ namespace TelemetryTools
             }
         }
 
-        private void HandleKeySuccess(UploadRequest uploadRequest, string message)
+        private void HandleKeyReturned(UniqueKey keyReturned)
         {
-            UniqueKey newKey = GetReturnedKey(message);
-            if (newKey != null)
-            {
-                AddNewKey(newKey);
-            }
-            else
-            {
-                KeyConnection.InvalidResponse++;
-                KeyConnection.ResetRequestDelay();
-            }
-        }
-
-        private UniqueKey GetReturnedKey(string message)
-        {
-            if (message.StartsWith("key:"))
-            {
-                UniqueKey uniqueKey = message.Substring(4);
-                Debug.Log("Key retrieved: " + uniqueKey);
-                return uniqueKey;
-            }
-            else
-            {
-                Debug.LogWarning("Invalid key retrieved: " + message);
-                return null;
-            }
+            AddNewKey(keyReturned);
         }
 
         private void AddNewKey(UniqueKey newKey)

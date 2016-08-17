@@ -31,6 +31,7 @@ using FrameID = System.UInt32;
 using UserDataKey = System.String;
 using UniqueKey = System.String;
 
+
 namespace TelemetryTools
 {
     public class Telemetry
@@ -118,7 +119,7 @@ namespace TelemetryTools
         public void Update(float deltaTime)
         {
             if (buffer.OffBufferFull)
-                if (!DataConnection.Busy)
+                if (DataConnection.ReadyToSend)
                     buffer.OffBufferFull = !SendBuffer(Utility.RemoveTrailingNulls(buffer.OffBuffer));
 #if POSTENABLED
             UserDataConnection.Update(deltaTime);
@@ -136,7 +137,7 @@ namespace TelemetryTools
                         ConnectionLogger.Instance.UploadCacheFilesDelay = uploadCachedFilesDelayOnFailure;
 #endif
 
-                if ((!buffer.OffBufferFull) && (!DataConnection.Busy))
+                if ((!buffer.OffBufferFull) && (DataConnection.ReadyToSend))
                     if (buffer.ReadyToSend)
                         if (SendBuffer(buffer.GetDataInActiveBuffer(), httpOnly: true))
                             buffer.ResetBufferPosition();
@@ -179,15 +180,14 @@ namespace TelemetryTools
 
 #if POSTENABLED
 
-            if (DataConnection.Initialised())
+            if (DataConnection.ConnectionActive)
             {
     #if LOCALSAVEENABLED
                 if (!www.isDone)
                     WriteCacheFile(wwwData, wwwSessionID, wwwSequenceID, wwwKeyID);
     #endif
-                DataConnection.Dispose();
+                DataConnection.DisposeRequest();
             }
-
 
             /*if ((httpPostEnabled) && (!savedBuffer))
             {
@@ -203,8 +203,7 @@ namespace TelemetryTools
 
             if (!savedBuffer)
             {
-                Debug.LogWarning("Data lost on close.");
-                //    lostData += (uint) dataInBuffer.Length;
+                Debug.LogWarning(dataInBuffer.Length + " bytes lost on close: " + Utility.BytesToString(dataInBuffer));
             }
         }
 
@@ -252,7 +251,7 @@ namespace TelemetryTools
             if (userDataFilesList.Count > 0)
             {
                 int i = 0;
-                if (!UserDataConnection.Busy)
+                if (UserDataConnection.ReadyToSend)
                 {
                     string[] separators = new string[1];
                     separators[0] = ".";
@@ -273,7 +272,7 @@ namespace TelemetryTools
         }
 #endif
 
-        #if LOCALSAVEENABLED
+#if LOCALSAVEENABLED
         private bool UploadBacklogOfCacheFiles()
         {
             if (cachedFilesList.Count > 0)
@@ -341,7 +340,7 @@ namespace TelemetryTools
 #if POSTENABLED
             if (HTTPPostEnabled)
             {
-                if (!DataConnection.Busy)
+                if (DataConnection.ReadyToSend)
                 {
                     if (KeyManager.CurrentKeyIsFetched)
                     {
@@ -461,8 +460,8 @@ namespace TelemetryTools
             SendFrame();
             //SendStreamValue(TelemetryTools.Stream.FrameTime, System.DateTime.UtcNow.Ticks);
             startTime = (DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond);
-            SendKeyValuePair(TelemetryTools.Event.TelemetryStart, System.DateTime.UtcNow.ToString("u"));
-            SendEvent(Event.TelemetryStart);
+            SendKeyValuePair(Strings.Event.TelemetryStart, System.DateTime.UtcNow.ToString("u"));
+            SendEvent(Strings.Event.TelemetryStart);
         }
 
 
@@ -487,7 +486,7 @@ namespace TelemetryTools
             if (KeyManager.CurrentKeyIsSet)
             {
                 ConnectionLogger.Instance.AddDataLoggedSinceUpdate((uint)data.Length);
-                bool firstFrame = frameID != 0;
+                bool firstFrame = frameID == 0;
                 buffer.BufferInNewFrame(data, firstFrame);
             }
             else
@@ -502,6 +501,7 @@ namespace TelemetryTools
             sb.Append(frameID);
             sb.Append("");
             BufferInNewFrame(Utility.StringToBytes(sb.ToString()));
+            frameID++;
         }
 
         public void SendEvent(string name, Milliseconds time)
@@ -1028,7 +1028,7 @@ namespace TelemetryTools
                         
 #else
             ConnectionLogger.Instance.AddLostData((uint)bufferUploadRequest.Data.Length);
-            DataConnection.Dispose();
+            DataConnection.DisposeRequest();
 #endif
 
         }

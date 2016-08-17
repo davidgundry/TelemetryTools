@@ -1,4 +1,4 @@
-﻿namespace TelemetryTools
+﻿namespace TelemetryTools.Strings
 {
     /// <summary>
     /// This class contains pre-defined event strings for basic system events.
