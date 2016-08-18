@@ -58,8 +58,7 @@ namespace TelemetryTools
         public UserDataUploadConnection UserDataConnection { get; set; }
 #endif
 
-        private Dictionary<UserDataKey,string> userData;
-        public Dictionary<UserDataKey, string> UserData { get { return userData; } set { userData = value; } }
+        public Dictionary<UserDataKey, string> UserData { get;  set; }
 #if LOCALSAVEENABLED
 
         public List<FilePath> UserDataFilesList { get; private set; }
@@ -69,6 +68,8 @@ namespace TelemetryTools
         float cacheFileBacklogDelay;
         float totalCacheFileBacklogDelay;
 #endif
+
+        public const FilePath uploadFileExtension = "telemetry";
 
         public int CachedFiles
         {
@@ -94,6 +95,7 @@ namespace TelemetryTools
             Buffer = new Buffer();
             KeyManager = new KeyManager(this, keyServer);
             sessionID = LoadSessionIDFromPlayerPrefs();
+            UserData = new Dictionary<UserDataKey, string>();
 
 #if LOCALSAVEENABLED
             cachedFilesList = FileAccessor.GetCacheDataFilesList();
@@ -187,7 +189,7 @@ namespace TelemetryTools
         public void AddOrUpdateUserDataKeyValue(UserDataKey key, string value)
         {
             if (KeyManager.CurrentKeyID != null)
-                userData[key] = value;
+                UserData[key] = value;
             else
                 Debug.LogWarning("Cannot log user data without a unique key.");
         }
@@ -454,7 +456,7 @@ namespace TelemetryTools
 #if LOCALSAVEENABLED
         private void SaveUserData(KeyID keyID)
         {
-            FileAccessor.SaveUserData(keyID, userData, UserDataFilesList);
+            FileAccessor.SaveUserData(keyID, UserData, UserDataFilesList);
         }
 
         private void UploadBacklogOfCachedUserData()
@@ -552,7 +554,7 @@ namespace TelemetryTools
                 {
                     if (KeyManager.CurrentKeyIsFetched)
                     {
-                        DataConnection.UploadData(data, sessionID, sequenceID, FileAccessor.fileExtension, KeyManager.CurrentKey, KeyManager.CurrentKeyID);
+                        DataConnection.UploadData(data, sessionID, sequenceID, uploadFileExtension, KeyManager.CurrentKey, KeyManager.CurrentKeyID);
                         sequenceID++;
                         return true;
                     }
@@ -618,6 +620,7 @@ namespace TelemetryTools
 
         }
 
+#if LOCALSAVEENABLED
         private bool WriteCacheFileAndAddToList(KeyAssociatedData cacheFileData)
         {
             if (cacheFileData.Data.Length == 0)
@@ -634,6 +637,7 @@ namespace TelemetryTools
             }
             return false;
         }
+#endif
 
         // Used as delegate for UserDataUploadConnection
         private void RemoveLocalCopyOfUploadedUserData(UploadRequest uploadRequest, string response)
@@ -655,7 +659,6 @@ namespace TelemetryTools
             UserDataFilesList.Remove(key.ToString() + "." + FileAccessor.userDataFileExtension);
             UserDataFilesListDirty = true;
         }
-#endif
 
         private void ReduceCacheFileBacklogDelay(float deltaTime)
         {
@@ -672,6 +675,7 @@ namespace TelemetryTools
         {
             cachedFilesListDirty = !FileAccessor.WriteCacheFilesList(cachedFilesList);
         }
+#endif
 
         private void WriteDataInActiveBufferToFile()
         {
@@ -707,7 +711,7 @@ namespace TelemetryTools
             if (KeyManager.CurrentKeyIsFetched)
             {
                 if (key == KeyManager.CurrentKeyID)
-                    UserDataConnection.SendUserData(userData, KeyManager.GetKeyByID(key), key);
+                    UserDataConnection.SendUserData(UserData, KeyManager.GetKeyByID(key), key);
 #if LOCALSAVEENABLED
                 else
                     UserDataConnection.SendUserData(FileAccessor.LoadUserData(key), KeyManager.GetKeyByID(key), key);

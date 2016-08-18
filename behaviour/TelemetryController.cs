@@ -14,7 +14,9 @@ namespace TelemetryTools.Behaviour
         public bool showLogging;
 
         public Telemetry Telemetry { get; set; }
+#if LOCALSAVEENABLED
         public FileAccessor FileAccessor { get; private set; }
+#endif
 
         void Awake()
         {
@@ -24,8 +26,9 @@ namespace TelemetryTools.Behaviour
             {
                 Destroy(gameObject);
             }
-
+#if LOCALSAVEENABLED
             FileAccessor = GetComponent<FileAccessor>();
+#endif
         }
 
         void Start()
