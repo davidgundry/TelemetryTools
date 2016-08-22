@@ -24,27 +24,25 @@ namespace TelemetryTools
 {
     public class KeyManager
     {
-        private Telemetry telemetry;
+        private KeyUploadConnection KeyConnection { get; set; }
+        public bool ConnectionActive { get { return KeyConnection.ConnectionActive; } }
 
-        public KeyUploadConnection KeyConnection { get; set; }
+        private UniqueKey[] Keys { get; private set; }
 
-        public UniqueKey[] Keys { get; private set; }
         public int NumberOfKeys { get { if (Keys != null) return Keys.Length; else return 0; } }
         public uint NumberOfUsedKeys { get; private set; }
         public KeyID LatestUsedKey { get { if (NumberOfUsedKeys > 0) return NumberOfUsedKeys - 1; else return null; } }
-        
         public UniqueKey CurrentKey { get { if (Keys != null) if (CurrentKeyID != null) if (CurrentKeyID < Keys.Length) return Keys[(int)CurrentKeyID]; return ""; } }
         public KeyID CurrentKeyID { get; private set; }
         public bool CurrentKeyIsSet { get { return CurrentKeyID != null; } }
         public bool CurrentKeyIsFetched { get { if (CurrentKeyIsSet) return CurrentKeyID < NumberOfKeys;  return false; } }
 
-        public KeyManager(Telemetry telemetry, URL keyServer)
+        public KeyManager(KeyUploadConnection keyUploadConnection)
         {
-            this.telemetry = telemetry;
             Keys = new string[0];
 
 #if POSTENABLED
-            KeyConnection = new KeyUploadConnection(keyServer);
+            KeyConnection = keyUploadConnection;
             KeyConnection.OnKeyReturned += new KeyUploadConnection.KeyReturnedHandler(HandleKeyReturned);
             LoadKeysFromPlayerPrefs();
 #endif
@@ -87,40 +85,25 @@ namespace TelemetryTools
             if (LatestUsedKey != null)
                 ChangeKey((uint)LatestUsedKey);
             else
-                ChangeKey();
+                NewKey();
         }
                 
-        public void ChangeKey()
+        public void NewKey()
         {
             NumberOfUsedKeys++;
-            ChangeKey(NumberOfUsedKeys - 1, newKey: true);
+            CurrentKeyID = NumberOfUsedKeys - 1;
+            SaveCurrentKeyToUserPrefs();
         }
 
-        public void ChangeKey(uint key, bool newKey = false)
+        public void ChangeKey(uint key)
         {
             if (key < NumberOfUsedKeys)
             {
-                if (CurrentKeyID != null)
-                {
-#if LOCALSAVEENABLED
-                    telemetry.SaveUserData();
-#endif
-                    telemetry.SendAllBuffered();
-                }
-
                 CurrentKeyID = key;
-                if (!newKey)
-                {
-#if LOCALSAVEENABLED
-                    telemetry.UserData = Telemetry.LoadUserData(CurrentKeyID);
-#endif
-                }
-                else
-                    telemetry.UserData = new Dictionary<UserDataKey, string>();
                 SaveCurrentKeyToUserPrefs();
-
-                telemetry.Restart();
             }
+            else
+                throw new System.ArgumentOutOfRangeException("Tried to change to a key that has not been created");
         }
 
         private void SaveCurrentKeyToUserPrefs()

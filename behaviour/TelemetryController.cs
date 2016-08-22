@@ -3,6 +3,7 @@
 #endif
 
 using UnityEngine;
+using TelemetryTools.Upload;
 
 namespace TelemetryTools.Behaviour
 {
@@ -31,33 +32,28 @@ namespace TelemetryTools.Behaviour
 #endif
         }
 
-        void Start()
+        public Telemetry CreateTelemetry(string baseURL)
         {
+            Buffer buffer = new Buffer();
+            BufferUploadConnection dataConnection = new BufferUploadConnection(baseURL + "/import.php");
+            UserDataUploadConnection userDataConnection = new UserDataUploadConnection(baseURL + "/userdata.php");
+            KeyManager keyManager = new KeyManager(new KeyUploadConnection(baseURL + "/key.php"));
             
-        }
+#if LOCALSAVEENABLED
+            FileAccessor fileAccessor = telemetryController.FileAccessor;
+            Telemetry telemetry = new Telemetry(fileAccessor, buffer, keyManager, dataConnection, userDataConnection);
+#else
+            Telemetry telemetry = new Telemetry(buffer, keyManager, dataConnection, userDataConnection);
+#endif
 
-        public void SetRemoteURLsFromPlayerPrefs()
-        {
-            SetRemoteURLs(PlayerPrefs.GetString("URL"));
-        }
-
-        public void SetRemoteURLs(string baseURL)
-        {
-            if (Telemetry != null)
-            {
-                Telemetry.DataConnection.SetURL(baseURL + "/import.php");
-                Telemetry.KeyManager.KeyConnection.SetURL(baseURL + "/key.php");
-                Telemetry.UserDataConnection.SetURL(baseURL + "/userdata.php");
-            }
-            else
-                throw new TelemetryDoesntExistException();
+            return telemetry;
         }
 
         public void ChangeKey()
         {
             if (Telemetry != null)
             {
-                Telemetry.KeyManager.ChangeKey();
+                Telemetry.NewKey();
             }
             else
                 throw new TelemetryDoesntExistException();
@@ -70,7 +66,7 @@ namespace TelemetryTools.Behaviour
                 if (key < 0)
                     throw new System.ArgumentOutOfRangeException("All key IDs are positive integers");
                 uint keyId = (uint)key;
-                Telemetry.KeyManager.ChangeKey(keyId);
+                Telemetry.ChangeKey(keyId);
             }
             else 
                 throw new TelemetryDoesntExistException();
@@ -80,7 +76,7 @@ namespace TelemetryTools.Behaviour
         {
             if (Telemetry != null)
             {
-                return Telemetry.KeyManager.CurrentKey;
+                return Telemetry.CurrentKey;
             }
             throw new TelemetryDoesntExistException();
         }
@@ -92,7 +88,7 @@ namespace TelemetryTools.Behaviour
                 if (key < 0)
                     throw new System.ArgumentOutOfRangeException("All key IDs are positive integers");
                 uint keyId = (uint)key;
-                return Telemetry.KeyManager.GetKeyByID(keyId);
+                return Telemetry.GetKeyByID(keyId);
             }
             throw new TelemetryDoesntExistException();
         }

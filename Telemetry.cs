@@ -37,7 +37,7 @@ namespace TelemetryTools
     public class Telemetry
     {
         private Buffer Buffer { get; set; }
-        public KeyManager KeyManager { get; private set; }
+        private KeyManager KeyManager { get; set; }
 
         private Milliseconds startTime = 0;
         private readonly SessionID sessionID = 0;
@@ -89,24 +89,22 @@ namespace TelemetryTools
         {
             FileAccessor = fileAccessor;
 #else
-        public Telemetry(URL uploadURL = "", URL keyServer = "", URL userDataURL = "")
+        public Telemetry(Buffer buffer, KeyManager keyManager, BufferUploadConnection dataConnection, UserDataUploadConnection userDataConnection)
         {
 #endif
-            Buffer = new Buffer();
-            KeyManager = new KeyManager(this, keyServer);
+            Buffer = buffer;
+            KeyManager = keyManager;
+#if POSTENABLED
+            DataConnection = dataConnection;
+            DataConnection.OnError += new UploadConnection.ErrorHandler(SaveDataOnBufferUploadErrorIfWeCan);
+            UserDataConnection = userDataConnection;
+            UserDataConnection.OnSuccess += new UploadConnection.SuccessHandler(RemoveLocalCopyOfUploadedUserData);
+#endif
             sessionID = LoadSessionIDFromPlayerPrefs();
             UserData = new Dictionary<UserDataKey, string>();
-
 #if LOCALSAVEENABLED
             cachedFilesList = FileAccessor.GetCacheDataFilesList();
             UserDataFilesList = FileAccessor.GetUserDataFilesList();
-#endif
-
-#if POSTENABLED
-            DataConnection = new BufferUploadConnection(uploadURL);
-            DataConnection.OnError += new UploadConnection.ErrorHandler(SaveDataOnBufferUploadErrorIfWeCan);
-            UserDataConnection = new UserDataUploadConnection(userDataURL);
-            UserDataConnection.OnSuccess += new UploadConnection.SuccessHandler(RemoveLocalCopyOfUploadedUserData);
 #endif
         }
 
@@ -140,6 +138,39 @@ namespace TelemetryTools
             if (cachedFilesListDirty)
                 SaveCachedFilesList();
 #endif
+        }
+
+        public bool CurrentKeyIsFetched { get { return KeyManager.CurrentKeyIsFetched; } }
+        public UniqueKey CurrentKey { get { return KeyManager.CurrentKey; } }
+
+        public void NewKey()
+        {
+            SaveDataIfWeHaveKey();
+            KeyManager.NewKey();
+            UserData = new Dictionary<UserDataKey, string>();
+            Restart();
+        }
+
+        public void ChangeKey(uint key)
+        {
+            SaveDataIfWeHaveKey();
+#if LOCALSAVEENABLED
+            UserData = Telemetry.LoadUserData(CurrentKeyID);
+#else
+            UserData = new Dictionary<UserDataKey, string>();
+#endif
+            Restart();
+        }
+
+        private void SaveDataIfWeHaveKey()
+        {
+            if (KeyManager.CurrentKeyID != null)
+            {
+#if LOCALSAVEENABLED
+                SaveUserData();
+#endif
+                SendAllBuffered();
+            }
         }
 
         public void WriteEverythingOnQuit()
@@ -179,7 +210,7 @@ namespace TelemetryTools
             if (!DataConnection.ConnectionActive)
                 if (!UserDataConnection.ConnectionActive)
                     if (UserData.Count == 0)
-                        if (!KeyManager.KeyConnection.ConnectionActive)
+                        if (!KeyManager.ConnectionActive)
                             if (!Buffer.FullBufferReadyToSend)
                                 if (Utility.RemoveTrailingNulls(Buffer.GetDataInActiveBuffer()).Length == 0)
                                     return true;
@@ -723,6 +754,16 @@ namespace TelemetryTools
                 Debug.LogWarning("Cannot upload user data of keyID " + key + " because we have not yet fetched that key.");
                 return false;
             }
+        }
+
+        public UniqueKey GetKeyByID(FrameID keyId)
+        {
+            return KeyManager.GetKeyByID(keyId);
+        }
+
+        public void ReuseOrCreateKey()
+        {
+            KeyManager.ReuseOrCreateKey();
         }
     }
 }
