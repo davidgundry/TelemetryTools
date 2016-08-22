@@ -36,6 +36,11 @@ namespace TelemetryTools
 {
     public class Telemetry
     {
+        private const FilePath uploadFileExtension = "telemetry";
+
+        public bool CurrentKeyIsFetched { get { return KeyManager.CurrentKeyIsFetched; } }
+        public UniqueKey CurrentKey { get { return KeyManager.CurrentKey; } }
+
         private Buffer Buffer { get; set; }
         private KeyManager KeyManager { get; set; }
 
@@ -47,18 +52,18 @@ namespace TelemetryTools
 #if LOCALSAVEENABLED
         private List<FilePath> cachedFilesList;
         private bool cachedFilesListDirty;
-        public FileAccessor FileAccessor { get; set; }
+        private FileAccessor FileAccessor { get; set; }
 #else
-        public object FileAccessor { get; set; }
+        private object FileAccessor { get; set; }
 #endif
 
 #if POSTENABLED 
-        public bool HTTPPostEnabled { get; set; }
-        public BufferUploadConnection DataConnection { get; set; }
-        public UserDataUploadConnection UserDataConnection { get; set; }
+        private bool HTTPPostEnabled { get; set; }
+        private BufferUploadConnection DataConnection { get; set; }
+        private UserDataUploadConnection UserDataConnection { get; set; }
 #endif
 
-        public Dictionary<UserDataKey, string> UserData { get;  set; }
+        private Dictionary<UserDataKey, string> UserData { get; set; }
 #if LOCALSAVEENABLED
 
         public List<FilePath> UserDataFilesList { get; private set; }
@@ -68,9 +73,6 @@ namespace TelemetryTools
         float cacheFileBacklogDelay;
         float totalCacheFileBacklogDelay;
 #endif
-
-        public const FilePath uploadFileExtension = "telemetry";
-
         public int CachedFiles
         {
             get
@@ -85,7 +87,7 @@ namespace TelemetryTools
         }
 
 #if LOCALSAVEENABLED
-        public Telemetry(FileAccessor fileAccessor, URL uploadURL = "", URL keyServer = "", URL userDataURL = "")
+        public Telemetry(FileAccessor fileAccessor, Buffer buffer, KeyManager keyManager, BufferUploadConnection dataConnection, UserDataUploadConnection userDataConnection)
         {
             FileAccessor = fileAccessor;
 #else
@@ -140,18 +142,15 @@ namespace TelemetryTools
 #endif
         }
 
-        public bool CurrentKeyIsFetched { get { return KeyManager.CurrentKeyIsFetched; } }
-        public UniqueKey CurrentKey { get { return KeyManager.CurrentKey; } }
-
-        public void NewKey()
+        public void ChangeToNewKey()
         {
             SaveDataIfWeHaveKey();
-            KeyManager.NewKey();
+            KeyManager.ChangeToNewKey();
             UserData = new Dictionary<UserDataKey, string>();
             Restart();
         }
 
-        public void ChangeKey(uint key)
+        public void ChangeToKey(uint key)
         {
             SaveDataIfWeHaveKey();
 #if LOCALSAVEENABLED
@@ -164,13 +163,21 @@ namespace TelemetryTools
 
         private void SaveDataIfWeHaveKey()
         {
-            if (KeyManager.CurrentKeyID != null)
+            if (KeyManager.CurrentKeyIsSet)
             {
 #if LOCALSAVEENABLED
                 SaveUserData();
 #endif
                 SendAllBuffered();
             }
+        }
+
+        private void Restart()
+        {
+            SendFrame();
+            startTime = (DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond);
+            SendKeyValuePair(Strings.Event.TelemetryStart, System.DateTime.UtcNow.ToString("u"));
+            SendEvent(Strings.Event.TelemetryStart);
         }
 
         public void WriteEverythingOnQuit()
@@ -191,17 +198,6 @@ namespace TelemetryTools
 #endif
                 DataConnection.DisposeRequest();
             }
-
-            /*if ((httpPostEnabled) && (!savedBuffer))
-            {
-                if (currentKeyID != null)
-                    if (currentKeyID < NumberOfKeys)
-                    {
-                        WWW stopwww = null;
-                        SendByHTTPPost(dataInBuffer, sessionID, sequenceID, fileExtension, keys[(uint) currentKeyID], currentKeyID, uploadURL, ref stopwww, out wwwData, out wwwSequenceID, out wwwSessionID, out wwwBusy, out wwwKey, out wwwKeyID, ref totalHTTPRequestsSent);
-                        savedBuffer = true;
-                    }
-            }*/
 #endif
         }
 
@@ -239,7 +235,7 @@ namespace TelemetryTools
 
             if (Buffer.FullBufferReadyToSend)
             {
-                bool success = !SendBuffer(Utility.RemoveTrailingNulls(Buffer.OffBuffer));
+                bool success = !SendBuffer(Buffer.GetDataInFullBuffer());
                 Buffer.FullBufferReadyToSend = success;
             }
 
@@ -247,14 +243,7 @@ namespace TelemetryTools
             Buffer.ResetBufferPosition();
         }
 
-        public void Restart()
-        {
-            SendFrame();
-            //SendStreamValue(TelemetryTools.Stream.FrameTime, System.DateTime.UtcNow.Ticks);
-            startTime = (DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond);
-            SendKeyValuePair(Strings.Event.TelemetryStart, System.DateTime.UtcNow.ToString("u"));
-            SendEvent(Strings.Event.TelemetryStart);
-        }
+
 
         public void SendFrame()
         {
@@ -567,7 +556,8 @@ namespace TelemetryTools
 #endif
         private void SendFullBuffer()
         {
-            Buffer.FullBufferReadyToSend = !SendBuffer(Utility.RemoveTrailingNulls(Buffer.OffBuffer));
+            bool success = SendBuffer(Buffer.GetDataInFullBuffer());
+            Buffer.FullBufferReadyToSend = !success;
         }
 
         private void SendPartialBuffer()

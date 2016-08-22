@@ -23,8 +23,9 @@ namespace TelemetryTools.Upload
 {
     public class UploadConnection
     {
+        private const float defaultTotalRequestDelay = 1;
+
         public bool Busy { get; protected set; }
-        public URL URL { get; private set; }
         public bool BadURL { get; private set; }
         public UploadRequest UploadRequest { get; private set; }
 
@@ -37,7 +38,6 @@ namespace TelemetryTools.Upload
         public bool ReadyToSend { get { return ((RequestDelay <= 0) && (!BadURL) && (!Busy)); } }
         protected float RequestDelay { get; set; }
         protected float TotalRequestDelay { get; set; }
-        private const float defaultTotalRequestDelay = 1;
 
         public int Requests { get; protected set; }
         public int Errors { get; private set; }
@@ -45,16 +45,12 @@ namespace TelemetryTools.Upload
         public int InvalidResponse { get; set; }
         protected Bytes BytesSent { get; private set; }
 
+        private readonly URL url;
+
         public UploadConnection(URL url)
         {
-            URL = url;
+            this.url = url;
             TotalRequestDelay = defaultTotalRequestDelay;
-        }
-
-        public void SetURL(URL url)
-        {
-            URL = url;
-            BadURL = false;
         }
 
         public bool ConnectionActive

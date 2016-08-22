@@ -53,7 +53,7 @@ namespace TelemetryTools.Behaviour
         {
             if (Telemetry != null)
             {
-                Telemetry.NewKey();
+                Telemetry.ChangeToNewKey();
             }
             else
                 throw new TelemetryDoesntExistException();
@@ -66,7 +66,7 @@ namespace TelemetryTools.Behaviour
                 if (key < 0)
                     throw new System.ArgumentOutOfRangeException("All key IDs are positive integers");
                 uint keyId = (uint)key;
-                Telemetry.ChangeKey(keyId);
+                Telemetry.ChangeToKey(keyId);
             }
             else 
                 throw new TelemetryDoesntExistException();

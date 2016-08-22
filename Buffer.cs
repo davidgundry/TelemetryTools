@@ -28,11 +28,11 @@ namespace TelemetryTools
         private const Bytes defaultMinSendingThreshold = 1024;
         private readonly Bytes minSendingThreshold;
 
-        public byte[] ActiveBuffer { get { if (buffer1Active) return outboxBuffer1; else return outboxBuffer2; } }
-        public byte[] OffBuffer { get { if (buffer1Active) return outboxBuffer2; else return outboxBuffer1; } }
-
         public bool FullBufferReadyToSend { get; set; }
         public bool PartialBufferReadyToSend { get { return bufferPos > minSendingThreshold; } }
+
+        private byte[] ActiveBuffer { get { if (buffer1Active) return outboxBuffer1; else return outboxBuffer2; } }
+        private byte[] OffBuffer { get { if (buffer1Active) return outboxBuffer2; else return outboxBuffer1; } }
 
         private byte[] outboxBuffer1;
         private byte[] outboxBuffer2;
@@ -79,11 +79,9 @@ namespace TelemetryTools
             return partBuffer;
         }
 
-        private void AddEndFrameBytes()
+        public byte[] GetDataInFullBuffer()
         {
-            byte[] endFrame = Utility.StringToBytes("}\n"); // newline required for mongo import?
-            System.Buffer.BlockCopy(endFrame, 0, frameBuffer, frameBufferPos, endFrame.Length);
-            frameBufferPos += endFrame.Length;
+            return Utility.RemoveTrailingNulls(OffBuffer);
         }
 
         public void BufferToFrameBuffer(byte[] data)
@@ -126,8 +124,14 @@ namespace TelemetryTools
             bufferPos += frameBufferPos;
             ResetFrameBufferPosition();
 
-
             BufferToFrameBuffer(data);
+        }
+
+        private void AddEndFrameBytes()
+        {
+            byte[] endFrame = Utility.StringToBytes("}\n"); // newline required for mongo import?
+            System.Buffer.BlockCopy(endFrame, 0, frameBuffer, frameBufferPos, endFrame.Length);
+            frameBufferPos += endFrame.Length;
         }
 
     }

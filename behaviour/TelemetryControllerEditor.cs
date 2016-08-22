@@ -22,9 +22,9 @@ namespace TelemetryTools.Behaviour
             TelemetryController telemetryController = (TelemetryController)target;
             if (telemetryController.Telemetry != null)
             {
-                EditorGUILayout.LabelField("UploadURL", telemetryController.Telemetry.DataConnection.URL);
-                EditorGUILayout.LabelField("Key Server", telemetryController.Telemetry.KeyManager.KeyConnection.URL);
-                EditorGUILayout.LabelField("User Data URL", telemetryController.Telemetry.UserDataConnection.URL);
+                EditorGUILayout.LabelField("UploadURL", telemetryController.Telemetry.DataConnection.url);
+                EditorGUILayout.LabelField("Key Server", telemetryController.Telemetry.KeyManager.KeyConnection.url);
+                EditorGUILayout.LabelField("User Data URL", telemetryController.Telemetry.UserDataConnection.url);
 
                 EditorGUILayout.Space();
 

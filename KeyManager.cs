@@ -83,19 +83,19 @@ namespace TelemetryTools
         public void ReuseOrCreateKey()
         {
             if (LatestUsedKey != null)
-                ChangeKey((uint)LatestUsedKey);
+                ChangeToKey((uint)LatestUsedKey);
             else
-                NewKey();
+                ChangeToNewKey();
         }
                 
-        public void NewKey()
+        public void ChangeToNewKey()
         {
             NumberOfUsedKeys++;
             CurrentKeyID = NumberOfUsedKeys - 1;
             SaveCurrentKeyToUserPrefs();
         }
 
-        public void ChangeKey(uint key)
+        public void ChangeToKey(uint key)
         {
             if (key < NumberOfUsedKeys)
             {
