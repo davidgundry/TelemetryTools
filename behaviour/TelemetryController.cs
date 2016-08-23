@@ -32,12 +32,12 @@ namespace TelemetryTools.Behaviour
 #endif
         }
 
-        public Telemetry CreateTelemetry(string baseURL)
+        public Telemetry CreateTelemetry(URL baseURL)
         {
             Buffer buffer = new Buffer();
-            BufferUploadConnection dataConnection = new BufferUploadConnection(baseURL + "/import.php");
-            UserDataUploadConnection userDataConnection = new UserDataUploadConnection(baseURL + "/userdata.php");
-            KeyManager keyManager = new KeyManager(new KeyUploadConnection(baseURL + "/key.php"));
+            BufferUploadConnection dataConnection = new BufferUploadConnection(new URL(baseURL + "/import.php"));
+            UserDataUploadConnection userDataConnection = new UserDataUploadConnection(new URL(baseURL + "/userdata.php"));
+            KeyManager keyManager = new KeyManager(new KeyUploadConnection(new URL(baseURL + "/key.php")));
             
 #if LOCALSAVEENABLED
             FileAccessor fileAccessor = telemetryController.FileAccessor;
@@ -76,7 +76,7 @@ namespace TelemetryTools.Behaviour
         {
             if (Telemetry != null)
             {
-                return Telemetry.CurrentKey;
+                return Telemetry.CurrentKey.AsString;
             }
             throw new TelemetryDoesntExistException();
         }
@@ -87,8 +87,7 @@ namespace TelemetryTools.Behaviour
             {
                 if (key < 0)
                     throw new System.ArgumentOutOfRangeException("All key IDs are positive integers");
-                uint keyId = (uint)key;
-                return Telemetry.GetKeyByID(keyId);
+                return Telemetry.GetKeyByID(new KeyID(key)).AsString;
             }
             throw new TelemetryDoesntExistException();
         }

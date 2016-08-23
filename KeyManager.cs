@@ -8,13 +8,10 @@ using Bytes = System.UInt32;
 using Megabytes = System.UInt32;
 using Milliseconds = System.Int64;
 using FilePath = System.String;
-using URL = System.String;
 using SequenceID = System.Nullable<System.UInt32>;
 using SessionID = System.Nullable<System.UInt32>;
-using KeyID = System.Nullable<System.UInt32>;
 using FrameID = System.UInt32;
 using UserDataKey = System.String;
-using UniqueKey = System.String;
 using System.Collections.Generic;
 
 using TelemetryTools.Upload;
@@ -30,16 +27,16 @@ namespace TelemetryTools
         private UniqueKey[] Keys { get; set; }
 
         public int NumberOfKeys { get { if (Keys != null) return Keys.Length; else return 0; } }
-        public uint NumberOfUsedKeys { get; private set; }
-        public KeyID LatestUsedKey { get { if (NumberOfUsedKeys > 0) return NumberOfUsedKeys - 1; else return null; } }
-        public UniqueKey CurrentKey { get { if (Keys != null) if (CurrentKeyID != null) if (CurrentKeyID < Keys.Length) return Keys[(int)CurrentKeyID]; return ""; } }
+        public int NumberOfUsedKeys { get; private set; }
+        public KeyID LatestUsedKey { get { if (NumberOfUsedKeys > 0) return new KeyID(NumberOfUsedKeys - 1); else return new KeyID(); } }
+        public UniqueKey CurrentKey { get { if (Keys != null) if (CurrentKeyID.IsSet) if (CurrentKeyID < Keys.Length) return Keys[CurrentKeyID.AsInt]; return new UniqueKey(); } }
         public KeyID CurrentKeyID { get; private set; }
-        public bool CurrentKeyIsSet { get { return CurrentKeyID != null; } }
+        public bool CurrentKeyIsSet { get { return CurrentKeyID.IsSet; } }
         public bool CurrentKeyIsFetched { get { if (CurrentKeyIsSet) return CurrentKeyID < NumberOfKeys;  return false; } }
 
         public KeyManager(KeyUploadConnection keyUploadConnection)
         {
-            Keys = new string[0];
+            Keys = new UniqueKey[0];
 
 #if POSTENABLED
             KeyConnection = keyUploadConnection;
@@ -52,16 +49,16 @@ namespace TelemetryTools
         {
             int numKeys = 0;
             if (Int32.TryParse(PlayerPrefs.GetString("numkeys"), out numKeys))
-                Keys = new string[numKeys];
+                Keys = new UniqueKey[numKeys];
 
             int usedKeysParsed = 0;
             Int32.TryParse(PlayerPrefs.GetString("usedkeys"), out usedKeysParsed);
-            NumberOfUsedKeys = (uint)usedKeysParsed;
+            NumberOfUsedKeys = usedKeysParsed;
 
-            CurrentKeyID = null;
+            CurrentKeyID = new KeyID();
 
             for (int i = 0; i < NumberOfKeys; i++)
-                Keys[i] = PlayerPrefs.GetString("key" + i);
+                Keys[i] = new UniqueKey(PlayerPrefs.GetString("key" + i));
         }
 
         public void Update(float deltaTime)
@@ -72,7 +69,7 @@ namespace TelemetryTools
 
         public UniqueKey GetKeyByID(KeyID id)
         {
-            return Keys[(uint)id];
+            return Keys[id.AsInt];
         }
 
         public bool KeyHasBeenFetched(KeyID id)
@@ -82,8 +79,8 @@ namespace TelemetryTools
 
         public void ReuseOrCreateKey()
         {
-            if (LatestUsedKey != null)
-                ChangeToKey((uint)LatestUsedKey);
+            if (LatestUsedKey.IsSet)
+                ChangeToKey(LatestUsedKey);
             else
                 ChangeToNewKey();
         }
@@ -91,11 +88,11 @@ namespace TelemetryTools
         public void ChangeToNewKey()
         {
             NumberOfUsedKeys++;
-            CurrentKeyID = NumberOfUsedKeys - 1;
+            CurrentKeyID = new KeyID(NumberOfUsedKeys - 1);
             SaveCurrentKeyToUserPrefs();
         }
 
-        public void ChangeToKey(uint key)
+        public void ChangeToKey(KeyID key)
         {
             if (key < NumberOfUsedKeys)
             {
@@ -124,7 +121,7 @@ namespace TelemetryTools
         {
             if (NumberOfUsedKeys > NumberOfKeys)
             {
-                KeyConnection.RequestUniqueKey(UserProperties, (uint) NumberOfUsedKeys);
+                KeyConnection.RequestUniqueKey(UserProperties, new KeyID(NumberOfUsedKeys));
             }
         }
 
@@ -165,7 +162,7 @@ namespace TelemetryTools
 
         private void SaveNewKeyToPlayerPrefs(UniqueKey newKey)
         {
-            PlayerPrefs.SetString("key" + (NumberOfKeys - 1), newKey);
+            PlayerPrefs.SetString("key" + (NumberOfKeys - 1), newKey.AsString);
             PlayerPrefs.SetString("numkeys", NumberOfKeys.ToString());
             PlayerPrefs.Save();
         }

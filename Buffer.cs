@@ -13,7 +13,6 @@ using SessionID = System.Nullable<System.UInt32>;
 using KeyID = System.Nullable<System.UInt32>;
 using FrameID = System.UInt32;
 using UserDataKey = System.String;
-using UniqueKey = System.String;
 using System;
 
 

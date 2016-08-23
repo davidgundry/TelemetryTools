@@ -6,13 +6,10 @@ using Bytes = System.UInt32;
 using Megabytes = System.UInt32;
 using Milliseconds = System.Int64;
 using FilePath = System.String;
-using URL = System.String;
 using SequenceID = System.Nullable<System.UInt32>;
 using SessionID = System.Nullable<System.UInt32>;
-using KeyID = System.Nullable<System.UInt32>;
 using FrameID = System.UInt32;
 using UserDataKey = System.String;
-using UniqueKey = System.String;
 
 namespace TelemetryTools.Upload
 {
@@ -24,9 +21,9 @@ namespace TelemetryTools.Upload
 
         public void UploadData(byte[] data, SessionID sessionID, SequenceID sequenceID, FilePath fileExtension, UniqueKey key, KeyID keyID)
         {
-            if (!String.IsNullOrEmpty(key))
+            if (key.IsSet)
             {
-                Send(new BufferUploadRequest(new WWW(url, CreateWWWForm(key, data, sessionID, sequenceID, fileExtension)), key, keyID, data, sessionID,sequenceID));
+                Send(new BufferUploadRequest(new WWW(url.AsString, CreateWWWForm(key, data, sessionID, sequenceID, fileExtension)), key, keyID, data, sessionID, sequenceID));
             }
             else
             {
@@ -43,7 +40,7 @@ namespace TelemetryTools.Upload
             sb.Append(sequenceID);
             sb.Append(".");
             sb.Append(fileExtension);
-            form.AddField("key", key);
+            form.AddField("key", key.AsString);
             form.AddField("session", sessionID.ToString());
             form.AddBinaryData(fileExtension, data, sb.ToString());
 

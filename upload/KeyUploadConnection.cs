@@ -4,10 +4,6 @@ using UnityEngine;
 
 using TelemetryTools.Strings;
 
-using URL = System.String;
-using KeyID = System.Nullable<System.UInt32>;
-using UniqueKey = System.String;
-
 namespace TelemetryTools.Upload
 {
     public class KeyUploadConnection : UploadConnection
@@ -22,7 +18,7 @@ namespace TelemetryTools.Upload
 
         public void RequestUniqueKey(KeyValuePair<string, string>[] userData, KeyID keyID)
         {
-            Send(new UploadRequest(new WWW(url, CreateWWWForm(userData)), null, keyID));
+            Send(new UploadRequest(new WWW(url.AsString, CreateWWWForm(userData)), new UniqueKey(), keyID));
         }
 
         private WWWForm CreateWWWForm(KeyValuePair<string, string>[] userData)
@@ -38,7 +34,7 @@ namespace TelemetryTools.Upload
         private void HandleServerResponse(UploadRequest uploadRequest, string message)
         {
             UniqueKey newKey = GetReturnedKey(message);
-            if (newKey != null)
+            if (newKey.IsSet)
             {
                 OnKeyReturned.Invoke(newKey);
             }
@@ -53,14 +49,14 @@ namespace TelemetryTools.Upload
         {
             if (message.StartsWith("key:"))
             {
-                UniqueKey uniqueKey = message.Substring(4);
+                UniqueKey uniqueKey = new UniqueKey(message.Substring(4));
                 Debug.Log("Key retrieved: " + uniqueKey);
                 return uniqueKey;
             }
             else
             {
                 Debug.LogWarning("Invalid key retrieved: " + message);
-                return null;
+                return new UniqueKey();
             }
         }
     }

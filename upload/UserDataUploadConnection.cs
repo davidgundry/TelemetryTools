@@ -2,10 +2,7 @@
 using System;
 using System.Collections.Generic;
 
-using URL = System.String;
-using KeyID = System.Nullable<System.UInt32>;
 using UserDataKey = System.String;
-using UniqueKey = System.String;
 
 namespace TelemetryTools.Upload
 {
@@ -15,11 +12,11 @@ namespace TelemetryTools.Upload
 
         public void SendUserData(Dictionary<UserDataKey, string> userData, UniqueKey uniqueKey, KeyID keyID)
         {
-            if (!String.IsNullOrEmpty(uniqueKey))
+            if (uniqueKey.IsSet)
             {
                 if (userData.Count > 0)
                 {
-                    Send(new UploadRequest(new WWW(url, CreateWWWForm(userData, uniqueKey)),uniqueKey,keyID));
+                    Send(new UploadRequest(new WWW(url.AsString, CreateWWWForm(userData, uniqueKey)),uniqueKey,keyID));
                 }
                 else
                     Debug.LogWarning("Cannot send empty user data to server");
@@ -31,7 +28,7 @@ namespace TelemetryTools.Upload
         private WWWForm CreateWWWForm(Dictionary<UserDataKey, string> userData, UniqueKey uniqueKey)
         {
             WWWForm form = new WWWForm();
-            form.AddField("key", uniqueKey);
+            form.AddField("key", uniqueKey.AsString);
             foreach (string key in userData.Keys)
                 form.AddField(key, userData[key]);
             return form;
