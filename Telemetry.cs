@@ -640,7 +640,6 @@ namespace TelemetryTools
             DataConnection.LostData += (uint)bufferUploadRequest.Data.Length;
             DataConnection.DisposeRequest();
 #endif
-
         }
 
 #if LOCALSAVEENABLED
