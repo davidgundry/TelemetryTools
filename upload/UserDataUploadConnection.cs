@@ -19,7 +19,7 @@ namespace TelemetryTools.Upload
             {
                 if (userData.Count > 0)
                 {
-                    Send(new UploadRequest(new WWW(URL, CreateWWWForm(userData, uniqueKey)),uniqueKey,keyID));
+                    Send(new UploadRequest(new WWW(url, CreateWWWForm(userData, uniqueKey)),uniqueKey,keyID));
                 }
                 else
                     Debug.LogWarning("Cannot send empty user data to server");

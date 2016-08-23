@@ -22,7 +22,7 @@ namespace TelemetryTools.Upload
 
         public void RequestUniqueKey(KeyValuePair<string, string>[] userData, KeyID keyID)
         {
-            Send(new UploadRequest(new WWW(URL, CreateWWWForm(userData)), null, keyID));
+            Send(new UploadRequest(new WWW(url, CreateWWWForm(userData)), null, keyID));
         }
 
         private WWWForm CreateWWWForm(KeyValuePair<string, string>[] userData)

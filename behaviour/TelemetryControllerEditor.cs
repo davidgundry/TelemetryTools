@@ -22,7 +22,7 @@ namespace TelemetryTools.Behaviour
             TelemetryController telemetryController = (TelemetryController)target;
             if (telemetryController.Telemetry != null)
             {
-                EditorGUILayout.LabelField("UploadURL", telemetryController.Telemetry.DataConnection.url);
+                /*EditorGUILayout.LabelField("UploadURL", telemetryController.Telemetry.DataConnection.url);
                 EditorGUILayout.LabelField("Key Server", telemetryController.Telemetry.KeyManager.KeyConnection.url);
                 EditorGUILayout.LabelField("User Data URL", telemetryController.Telemetry.UserDataConnection.url);
 
@@ -39,7 +39,7 @@ namespace TelemetryTools.Behaviour
                 EditorGUILayout.LabelField("Total User Data Requests", telemetryController.Telemetry.UserDataConnection.Requests.ToString());
                 EditorGUILayout.LabelField("Total User Data Success", telemetryController.Telemetry.UserDataConnection.Successes.ToString());
                 EditorGUILayout.LabelField("Total User Data Errors", telemetryController.Telemetry.UserDataConnection.Errors.ToString());
-
+                */
                 EditorGUILayout.Space();
 
                 //EditorGUILayout.LabelField("Log Input", Mathf.Round(telemetryMonitor.Telemetry.LoggingRate / 1024) + " KB/s");
@@ -54,9 +54,9 @@ namespace TelemetryTools.Behaviour
 
                 EditorGUILayout.Space();
 
-                EditorGUILayout.LabelField("Used Keys", telemetryController.Telemetry.KeyManager.NumberOfUsedKeys.ToString());
+                /*EditorGUILayout.LabelField("Used Keys", telemetryController.Telemetry.KeyManager.NumberOfUsedKeys.ToString());
                 EditorGUILayout.LabelField("Keys", telemetryController.Telemetry.KeyManager.NumberOfKeys.ToString());
-                EditorGUILayout.LabelField("Current Key", "ID:" + telemetryController.Telemetry.KeyManager.CurrentKeyID.ToString() + " " + telemetryController.Telemetry.KeyManager.CurrentKey);
+                EditorGUILayout.LabelField("Current Key", "ID:" + telemetryController.Telemetry.KeyManager.CurrentKeyID.ToString() + " " + telemetryController.Telemetry.KeyManager.CurrentKey);*/
 
                 /*EditorGUILayout.IntField("Key", keyToChangeTo);
                 if (GUILayout.Button("Change Key"))

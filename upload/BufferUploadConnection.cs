@@ -26,7 +26,7 @@ namespace TelemetryTools.Upload
         {
             if (!String.IsNullOrEmpty(key))
             {
-                Send(new BufferUploadRequest(new WWW(URL, CreateWWWForm(key, data, sessionID, sequenceID, fileExtension)), key, keyID, data, sessionID,sequenceID));
+                Send(new BufferUploadRequest(new WWW(url, CreateWWWForm(key, data, sessionID, sequenceID, fileExtension)), key, keyID, data, sessionID,sequenceID));
             }
             else
             {

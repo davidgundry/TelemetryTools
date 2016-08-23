@@ -27,7 +27,7 @@ namespace TelemetryTools
         private KeyUploadConnection KeyConnection { get; set; }
         public bool ConnectionActive { get { return KeyConnection.ConnectionActive; } }
 
-        private UniqueKey[] Keys { get; private set; }
+        private UniqueKey[] Keys { get; set; }
 
         public int NumberOfKeys { get { if (Keys != null) return Keys.Length; else return 0; } }
         public uint NumberOfUsedKeys { get; private set; }

@@ -45,7 +45,7 @@ namespace TelemetryTools.Upload
         public int InvalidResponse { get; set; }
         protected Bytes BytesSent { get; private set; }
 
-        private readonly URL url;
+        protected readonly URL url;
 
         public UploadConnection(URL url)
         {
