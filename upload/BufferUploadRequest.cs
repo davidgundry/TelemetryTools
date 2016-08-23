@@ -23,14 +23,17 @@ namespace TelemetryTools.Upload
         private readonly SequenceID sequenceID;
         public SequenceID SequenceID { get { return sequenceID; } }
 
-        public BufferUploadRequest(WWW www, UniqueKey key, KeyID keyID, byte[] data, SessionID sessionID, SequenceID sequenceID) : base(www, key, keyID)
+        private readonly KeyAssociatedData keyedData;
+        public KeyAssociatedData KeyedData { get { return keyedData; } }
+
+        public BufferUploadRequest(WWW www, KeyAssociatedData keyedData) : base(www, keyedData.Key, keyedData.KeyID)
         {
-            byte[] dataCopy = new byte[data.Length];
-            System.Buffer.BlockCopy(data, 0, dataCopy, 0, data.Length);
+            byte[] dataCopy = new byte[keyedData.Data.Length];
+            System.Buffer.BlockCopy(keyedData.Data, 0, dataCopy, 0, keyedData.Data.Length);
 
             this.data = dataCopy;
-            this.sessionID = sessionID;
-            this.sequenceID = sequenceID;
+            this.sessionID = keyedData.SessionID;
+            this.sequenceID = keyedData.SequenceID;
         }
 
         public override Bytes RequestSizeInBytes()
@@ -40,7 +43,7 @@ namespace TelemetryTools.Upload
 
         public KeyAssociatedData GetKeyAssociatedData()
         {
-            return new KeyAssociatedData(Data, SessionID, SequenceID, KeyID);
+            return KeyedData;
         }
     }
 }

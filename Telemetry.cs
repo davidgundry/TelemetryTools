@@ -563,6 +563,11 @@ namespace TelemetryTools
                 Buffer.ResetBufferPosition();
         }
 
+        private KeyAssociatedData KeyData(byte[] data)
+        {
+            return new KeyAssociatedData(data, sessionID, sequenceID, KeyManager.CurrentKey, KeyManager.CurrentKeyID);
+        }
+
         private bool SendBuffer(byte[] data, bool httpOnly = false)
         {
 #if POSTENABLED
@@ -572,7 +577,7 @@ namespace TelemetryTools
                 {
                     if (KeyManager.CurrentKeyIsFetched)
                     {
-                        DataConnection.UploadData(data, sessionID, sequenceID, uploadFileExtension, KeyManager.CurrentKey, KeyManager.CurrentKeyID);
+                        DataConnection.UploadData(KeyData(data));
                         sequenceID++;
                         return true;
                     }
@@ -584,7 +589,7 @@ namespace TelemetryTools
 #if LOCALSAVEENABLED
             if (!httpOnly)
             {
-                if (WriteCacheFileAndAddToList(new KeyAssociatedData(data, sessionID, sequenceID, KeyManager.CurrentKeyID)))
+                if (WriteCacheFileAndAddToList(KeyData(data)))
                 {
                     sequenceID++;
                     return true;
@@ -592,7 +597,7 @@ namespace TelemetryTools
             }
             if (!httpOnly)
 #endif
-                Debug.LogWarning("Could not deal with buffer: " + Utility.BytesToString(data));
+            Debug.LogWarning("Could not deal with buffer: " + Utility.BytesToString(data));
 
             return false;
         }

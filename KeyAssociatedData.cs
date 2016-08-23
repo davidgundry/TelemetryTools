@@ -26,12 +26,16 @@ namespace TelemetryTools
         private readonly KeyID keyID;
         public KeyID KeyID { get { return keyID; } }
 
-        public KeyAssociatedData(byte[] data, SessionID sessionID, SequenceID sequenceID, KeyID keyID)
+        private readonly UniqueKey key;
+        public UniqueKey Key { get { return key; } }
+
+        public KeyAssociatedData(byte[] data, SessionID sessionID, SequenceID sequenceID, UniqueKey key, KeyID keyID)
         {
             this.data = data;
             this.sessionID = sessionID;
             this.sequenceID = sequenceID;
             this.keyID = keyID;
+            this.key = key;
         }
 
     }

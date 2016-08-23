@@ -35,7 +35,7 @@ namespace TelemetryTools.Behaviour
         public Telemetry CreateTelemetry(URL baseURL)
         {
             Buffer buffer = new Buffer();
-            BufferUploadConnection dataConnection = new BufferUploadConnection(new URL(baseURL + "/import.php"));
+            BufferUploadConnection dataConnection = new BufferUploadConnection(new URL(baseURL + "/import.php"),"telemetry");
             UserDataUploadConnection userDataConnection = new UserDataUploadConnection(new URL(baseURL + "/userdata.php"));
             KeyManager keyManager = new KeyManager(new KeyUploadConnection(new URL(baseURL + "/key.php")));
             

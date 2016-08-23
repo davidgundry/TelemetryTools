@@ -16,14 +16,18 @@ namespace TelemetryTools.Upload
     public class BufferUploadConnection : UploadConnection
     {
         public Bytes LostData { get; set; }
+        private readonly FilePath fileExtension;
 
-        public BufferUploadConnection(URL url) : base(url) { }
-
-        public void UploadData(byte[] data, SessionID sessionID, SequenceID sequenceID, FilePath fileExtension, UniqueKey key, KeyID keyID)
+        public BufferUploadConnection(URL url, FilePath fileExtension) : base(url)
         {
-            if (key.IsSet)
+            this.fileExtension = fileExtension;
+        }
+
+        public void UploadData(KeyAssociatedData keyedData)
+        {
+            if (keyedData.Key.IsSet)
             {
-                Send(new BufferUploadRequest(new WWW(url.AsString, CreateWWWForm(key, data, sessionID, sequenceID, fileExtension)), key, keyID, data, sessionID, sequenceID));
+                Send(new BufferUploadRequest(new WWW(url.AsString, CreateWWWForm(keyedData)), keyedData));
             }
             else
             {
@@ -31,18 +35,18 @@ namespace TelemetryTools.Upload
             }
         }
 
-        private WWWForm CreateWWWForm(UniqueKey key, byte[] data, SessionID sessionID, SequenceID sequenceID, FilePath fileExtension)
+        private WWWForm CreateWWWForm(KeyAssociatedData keyedData)
         {
             WWWForm form = new WWWForm();
             System.Text.StringBuilder sb = new System.Text.StringBuilder();
-            sb.Append(sessionID);
+            sb.Append(keyedData.SessionID);
             sb.Append(".");
-            sb.Append(sequenceID);
+            sb.Append(keyedData.SequenceID);
             sb.Append(".");
             sb.Append(fileExtension);
-            form.AddField("key", key.AsString);
-            form.AddField("session", sessionID.ToString());
-            form.AddBinaryData(fileExtension, data, sb.ToString());
+            form.AddField("key", keyedData.Key.AsString);
+            form.AddField("session", keyedData.SessionID.ToString());
+            form.AddBinaryData(fileExtension, keyedData.Data, sb.ToString());
 
             return form;
         }

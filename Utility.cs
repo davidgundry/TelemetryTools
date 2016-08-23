@@ -9,17 +9,14 @@ using Bytes = System.UInt32;
 using Megabytes = System.UInt32;
 using Milliseconds = System.Int64;
 using FilePath = System.String;
-using URL = System.String;
 using SequenceID = System.Nullable<System.UInt32>;
 using SessionID = System.Nullable<System.UInt32>;
-using KeyID = System.Nullable<System.UInt32>;
 using FrameID = System.UInt32;
 using UserDataKey = System.String;
 using System.ComponentModel;
 
 namespace TelemetryTools
 {
-
     public static class Utility
     {
         public static byte[] StringToBytes(string str)
