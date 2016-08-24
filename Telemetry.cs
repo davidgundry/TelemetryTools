@@ -33,8 +33,6 @@ namespace TelemetryTools
 {
     public class Telemetry
     {
-        private const FilePath uploadFileExtension = "telemetry";
-
         public bool CurrentKeyIsFetched { get { return KeyManager.CurrentKeyIsFetched; } }
         public UniqueKey CurrentKey { get { return KeyManager.CurrentKey; } }
 
@@ -612,7 +610,7 @@ namespace TelemetryTools
             if (KeyManager.CurrentKeyIsSet)
             {
                 ConnectionLogger.Instance.AddDataLoggedSinceUpdate((uint)data.Length);
-                Buffer.BufferToFrameBuffer(data);
+                Buffer.BufferInFrameBuffer(data);
             }
             else
                 Debug.LogWarning("Cannot buffer data without it being associated with a unique key. Create a new key.");

@@ -66,7 +66,7 @@ namespace TelemetryTools
             return Utility.RemoveTrailingNulls(OffBuffer);
         }
 
-        public void BufferToFrameBuffer(byte[] data)
+        public void BufferInFrameBuffer(byte[] data)
         {
             if (frameBufferPos + data.Length < frameBuffer.Length)
             {
@@ -106,7 +106,7 @@ namespace TelemetryTools
             bufferPos += frameBufferPos;
             ResetFrameBufferPosition();
 
-            BufferToFrameBuffer(data);
+            BufferInFrameBuffer(data);
         }
 
         private void AddEndFrameBytes()

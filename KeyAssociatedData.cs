@@ -37,6 +37,5 @@ namespace TelemetryTools
             this.keyID = keyID;
             this.key = key;
         }
-
     }
 }

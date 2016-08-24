@@ -14,36 +14,23 @@ namespace TelemetryTools.Upload
 {
     public class BufferUploadRequest : UploadRequest
     {
-        private readonly byte[] data;
-        public byte[] Data { get { return data; } }
-
-        private readonly SessionID sessionID;
-        public SessionID SessionID { get { return sessionID; } }
-
-        private readonly SequenceID sequenceID;
-        public SequenceID SequenceID { get { return sequenceID; } }
-
         private readonly KeyAssociatedData keyedData;
         public KeyAssociatedData KeyedData { get { return keyedData; } }
+
+        public byte[] Data { get { return keyedData.Data; } }
+        public SessionID SessionID { get { return keyedData.SessionID; } }
+        public SequenceID SequenceID { get { return keyedData.SequenceID; } }
 
         public BufferUploadRequest(WWW www, KeyAssociatedData keyedData) : base(www, keyedData.Key, keyedData.KeyID)
         {
             byte[] dataCopy = new byte[keyedData.Data.Length];
             System.Buffer.BlockCopy(keyedData.Data, 0, dataCopy, 0, keyedData.Data.Length);
-
-            this.data = dataCopy;
-            this.sessionID = keyedData.SessionID;
-            this.sequenceID = keyedData.SequenceID;
+            this.keyedData = keyedData;
         }
 
         public override Bytes RequestSizeInBytes()
         {
             return (uint) Data.Length;
-        }
-
-        public KeyAssociatedData GetKeyAssociatedData()
-        {
-            return KeyedData;
         }
     }
 }
